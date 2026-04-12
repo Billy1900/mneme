@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 axum = { version = "0.7", features = ["json"] }
+chrono = { workspace = true }
 mneme-api = { path = "../mneme-api" }
 mneme-consolidate = { path = "../mneme-consolidate" }
 mneme-core = { path = "../mneme-core" }

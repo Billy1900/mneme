@@ -19,10 +19,10 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use mneme_api::{ContextBuilder, MnemeDetail, MnemeSummary};
-use mneme_consolidate::{ConsolidateError, ConsolidationEngine, MockLLM};
+use mneme_api::{ContextBuilder, MnemeSummary};
+use mneme_consolidate::{ConsolidationEngine, MockLLM};
 use mneme_core::*;
-use mneme_embed::MockEmbeddingModel;
+use mneme_embed::{EmbeddingModel, MockEmbeddingModel};
 use mneme_store::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

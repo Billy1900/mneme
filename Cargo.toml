@@ -19,13 +19,3 @@ thiserror = "2"
 tracing = "0.1"
 async-trait = "0.1"
 reqwest = { version = "0.12", features = ["json"] }
-
-# Integration tests
-[dev-dependencies]
-mneme-core = { path = "mneme-core" }
-mneme-store = { path = "mneme-store" }
-mneme-embed = { path = "mneme-embed" }
-mneme-consolidate = { path = "mneme-consolidate" }
-mneme-api = { path = "mneme-api" }
-tokio = { version = "1", features = ["full"] }
-uuid = { version = "1", features = ["v4"] }
