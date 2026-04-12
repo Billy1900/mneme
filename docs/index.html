@@ -526,7 +526,7 @@ footer a:hover { color: var(--text); }
       no existing system has built.
     </p>
     <div class="hero-links">
-      <a href="https://github.com/user/mneme" class="btn-primary">View on GitHub</a>
+      <a href="https://github.com/Billy1900/mneme" class="btn-primary">View on GitHub</a>
       <a href="#operations" class="btn-secondary">How it works</a>
     </div>
   </div>
@@ -640,7 +640,6 @@ footer a:hover { color: var(--text); }
     <div class="op-card compact reveal">
       <div class="op-num">Operation 1</div>
       <h3>Compaction</h3>
-      <div class="op-zh">记忆压缩</div>
       <p>
         Working memory entries from agent sessions get embedded, clustered by similarity,
         and synthesized into semantic engrams via LLM. Raw observations become distilled knowledge.
@@ -654,7 +653,6 @@ footer a:hover { color: var(--text); }
     <div class="op-card evolve reveal">
       <div class="op-num">Operation 2</div>
       <h3>Evolution</h3>
-      <div class="op-zh">记忆演化</div>
       <p>
         Every retrieval triggers a drift check — cosine distance between the stored embedding
         and the current context. If drift exceeds a threshold, the LLM evaluates whether
@@ -668,7 +666,6 @@ footer a:hover { color: var(--text); }
     <div class="op-card resolve reveal">
       <div class="op-num">Operation 3</div>
       <h3>Conflict resolution</h3>
-      <div class="op-zh">记忆冲突解决</div>
       <p>
         When two engrams contradict, the system selects from three strategies based on evidence
         strength: <em>temporal supersede</em> (newer wins), <em>confidence merge</em> (synthesize both),
@@ -762,22 +759,24 @@ footer a:hover { color: var(--text); }
 <!-- Quick start -->
 <section class="container reveal">
   <span class="section-num">06 — Quick start</span>
-  <h2>Four lines to persistent memory</h2>
+  <h2>Persistent memory in four lines</h2>
 
-  <div class="code-block">
-<span class="comment">// During agent work session:</span>
+<div class="code-block">
+  <pre><code>
+<span class="comment">// Capture signals during a session</span>
 memory.<span class="fn">remember</span>(<span class="string">"User prefers Rust for systems"</span>, <span class="string">"s1"</span>).<span class="keyword">await</span>;
-memory.<span class="fn">remember</span>(<span class="string">"Building trading engine, sub-2ms latency"</span>, <span class="string">"s1"</span>).<span class="keyword">await</span>;
+memory.<span class="fn">remember</span>(<span class="string">"Building a sub-2ms trading engine"</span>, <span class="string">"s1"</span>).<span class="keyword">await</span>;
 
-<span class="comment">// When the agent needs context (returns summaries):</span>
-<span class="keyword">let</span> ctx = memory.<span class="fn">recall</span>(<span class="string">"what language for trading?"</span>, <span class="number">5</span>).<span class="keyword">await</span>;
+<span class="comment">// Retrieve relevant context (ranked summaries)</span>
+<span class="keyword">let</span> ctx = memory.<span class="fn">recall</span>(<span class="string">"preferred language for trading?"</span>, <span class="number">5</span>).<span class="keyword">await</span>;
 
-<span class="comment">// Progressive disclosure L2 — load full content:</span>
+<span class="comment">// Expand when you need full detail</span>
 <span class="keyword">let</span> detail = memory.<span class="fn">expand</span>(ctx[<span class="number">0</span>].id).<span class="keyword">await</span>;
 
-<span class="comment">// End session → compaction runs automatically:</span>
+<span class="comment">// End session → memory compacts automatically</span>
 memory.<span class="fn">end_session</span>(<span class="string">"s1"</span>).<span class="keyword">await</span>;
-  </div>
+  </code></pre>
+</div>
 </section>
 
 <div class="divider"></div>
@@ -839,8 +838,8 @@ memory.<span class="fn">end_session</span>(<span class="string">"s1"</span>).<sp
     MIT licensed. Framework-agnostic. Use as a library or HTTP server.
   </p>
   <div class="hero-links">
-    <a href="https://github.com/user/mneme" class="btn-primary">Get started</a>
-    <a href="https://github.com/user/mneme/blob/main/README.md" class="btn-secondary">Read the docs</a>
+    <a href="https://github.com/Billy1900/mneme" class="btn-primary">Get started</a>
+    <a href="https://github.com/Billy1900/mneme/blob/main/README.md" class="btn-secondary">Read the docs</a>
   </div>
 </section>
 
@@ -848,8 +847,8 @@ memory.<span class="fn">end_session</span>(<span class="string">"s1"</span>).<sp
   <div class="container">
     <p>Mneme is open source under the MIT license.</p>
     <p style="margin-top:8px;">
-      <a href="https://github.com/user/mneme">GitHub</a> &nbsp;&middot;&nbsp;
-      <a href="https://github.com/user/mneme/blob/main/README.md">Documentation</a>
+      <a href="https://github.com/Billy1900/mneme">GitHub</a> &nbsp;&middot;&nbsp;
+      <a href="https://github.com/Billy1900/mneme/blob/main/README.md">Documentation</a>
     </p>
   </div>
 </footer>
