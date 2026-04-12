@@ -1,0 +1,19 @@
+[package]
+name = "mneme-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dev-dependencies]
+mneme-core = { path = "../mneme-core" }
+mneme-store = { path = "../mneme-store" }
+mneme-embed = { path = "../mneme-embed" }
+mneme-consolidate = { path = "../mneme-consolidate" }
+mneme-api = { path = "../mneme-api" }
+tokio = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+[[test]]
+name = "integration"
+path = "integration.rs"

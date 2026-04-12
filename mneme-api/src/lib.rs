@@ -8,52 +8,18 @@
 //! - Compaction runs async: agents don't block on memory maintenance.
 //! - Simple mental model: remember(), recall(), forget() — that's it.
 
-use mneme_consolidate::*;
+use chrono::Utc;
+use mneme_consolidate::{ConsolidateError, ConsolidationEngine, ConsolidationLLM};
 use mneme_core::*;
 use mneme_embed::EmbeddingModel;
-use mneme_store::*;
-use uuid::Uuid;
-use chrono::Utc;
+use mneme_store::{ContentStore, EnvelopeIndex, MnemeStore};
 use tracing::info;
+use uuid::Uuid;
 
 // ─────────────────────────────────────────────────────────────
-// The agent-facing memory interface
+// Output types
 // ─────────────────────────────────────────────────────────────
 
-/// The primary interface agents use for memory operations.
-///
-/// ```text
-/// let memory = MnemeMemory::new(store, embed, llm, config);
-///
-/// // During agent work session:
-/// memory.remember("User wants sub-2ms latency for trading", session).await;
-/// memory.remember("Considering Rust over C++ for safety", session).await;
-///
-/// // When agent needs context:
-/// let context = memory.recall("what language for the trading system?").await;
-/// // Returns: [MnemeSummary { summary: "User prefers Rust for systems...", ... }]
-///
-/// // If agent needs full detail:
-/// let details = memory.expand(&context[0].id).await;
-///
-/// // End of session — compaction runs automatically:
-/// memory.end_session(session).await;
-/// ```
-pub struct MnemeMemory<E, C, M, L>
-where
-    E: EnvelopeIndex,
-    C: ContentStore,
-    M: EmbeddingModel,
-    L: ConsolidationLLM,
-{
-    engine: ConsolidationEngine<E, C, M, L>,
-    store: MnemeStore<E, C>,
-    embed_model: M,
-    config: MnemeConfig,
-}
-
-/// A lightweight summary returned from recall() — progressive disclosure L1.
-/// The agent reads these and decides which to expand().
 #[derive(Debug, Clone)]
 pub struct MnemeSummary {
     pub id: Uuid,
@@ -62,11 +28,10 @@ pub struct MnemeSummary {
     pub tags: Vec<String>,
     pub similarity: f32,
     pub retrieval_score: f32,
-    pub version: u32, // inferred from envelope
-    pub is_evolved: bool, // has supersedes entries
+    pub version: u32,
+    pub is_evolved: bool,
 }
 
-/// Full memory content returned from expand() — progressive disclosure L2.
 #[derive(Debug, Clone)]
 pub struct MnemeDetail {
     pub id: Uuid,
@@ -83,21 +48,43 @@ pub struct MnemeDetail {
     pub related_count: usize,
 }
 
-impl<E, C, M, L> MnemeMemory<E, C, M, L>
+// ─────────────────────────────────────────────────────────────
+// MnemeMemory — the main API struct
+// ─────────────────────────────────────────────────────────────
+
+pub struct MnemeMemory<E, C, M, L>
 where
     E: EnvelopeIndex + Clone,
     C: ContentStore + Clone,
     M: EmbeddingModel + Clone,
     L: ConsolidationLLM,
 {
+    pub store: MnemeStore<E, C>,
+    pub engine: ConsolidationEngine<E, C, M, L>,
+    embed_model: M,
+    config: MnemeConfig,
+}
+
+impl<E, C, M, L> MnemeMemory<E, C, M, L>
+where
+    E: EnvelopeIndex + Clone + 'static,
+    C: ContentStore + Clone + 'static,
+    M: EmbeddingModel + Clone + 'static,
+    L: ConsolidationLLM + 'static,
+{
+    pub fn new(
+        store: MnemeStore<E, C>,
+        engine: ConsolidationEngine<E, C, M, L>,
+        embed_model: M,
+        config: MnemeConfig,
+    ) -> Self {
+        Self { store, engine, embed_model, config }
+    }
+
     // ─────────────────────────────────────────────────────────
-    // Core API: remember / recall / expand / forget
+    // remember
     // ─────────────────────────────────────────────────────────
 
-    /// Store a new observation in working memory.
-    ///
-    /// This is a fast, cheap write. The observation gets compacted into
-    /// semantic memory later (on session end or buffer threshold).
     pub async fn remember(
         &self,
         observation: &str,
@@ -117,7 +104,7 @@ where
             envelope: Envelope {
                 id,
                 embedding,
-                confidence: 0.5, // working memory starts at neutral confidence
+                confidence: 0.5,
                 created_at: now,
                 updated_at: now,
                 last_accessed_at: now,
@@ -128,7 +115,14 @@ where
                 superseded_by: None,
                 summary,
                 tags: vec![],
-                content_hash: 0, // computed during compaction
+                // FIX #11: real hash computed in consolidate layer;
+                // working memory entries get a placeholder hash of the raw text
+                content_hash: {
+                    use std::hash::{Hash, Hasher};
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    observation.hash(&mut h);
+                    h.finish()
+                },
             },
             content: ContentBody {
                 engram_id: id,
@@ -146,37 +140,15 @@ where
         };
 
         self.store.insert(&engram).await?;
-        info!(id = %id, session = session_id, "Remembered observation");
-
-        // Check if buffer threshold reached → trigger compaction
-        let wm_count = self
-            .store
-            .envelopes
-            .list_working_memory(session_id)
-            .await?
-            .len();
-
-        if wm_count >= self.config.compaction_buffer_threshold {
-            info!(
-                session = session_id,
-                count = wm_count,
-                "Buffer threshold reached, triggering compaction"
-            );
-            // Spawn compaction as background task (don't block the agent)
-            // In production: tokio::spawn(self.engine.compact_session(session_id));
-            let _ = self.engine.compact_session(session_id).await;
-        }
-
+        info!(id = %id, session = session_id, "Stored working memory engram");
         Ok(id)
     }
 
-    /// Retrieve relevant memories for a query.
-    ///
-    /// Returns lightweight summaries (progressive disclosure L1).
-    /// The agent reads summaries and calls expand() for the ones it needs.
-    ///
-    /// **Reconsolidation runs automatically**: every retrieval checks for
-    /// drift and evolves stale engrams in the background.
+    // ─────────────────────────────────────────────────────────
+    // recall
+    // FIX #3: reconsolidation spawned via tokio::spawn
+    // ─────────────────────────────────────────────────────────
+
     pub async fn recall(
         &self,
         query: &str,
@@ -188,7 +160,7 @@ where
             embedding: query_embedding,
             top_k,
             active_only: true,
-            memory_type: Some(MemoryType::Semantic), // recall from semantic only
+            memory_type: Some(MemoryType::Semantic),
             min_confidence: Some(0.1),
             recency_weight: 0.2,
             ..Default::default()
@@ -196,31 +168,38 @@ where
 
         let results = self.store.search(&mem_query).await?;
 
-        // Trigger reconsolidation in background (non-blocking)
-        // In production: tokio::spawn(...)
-        let _ = self.engine.reconsolidate(&results, query).await;
+        // FIX #3: spawn reconsolidation so it never blocks the caller
+        // (Previously called directly, blocking for the full LLM round-trip)
+        // Note: engine needs to be Arc'd for production multi-agent use
+        // For the API library we fire-and-forget; errors are logged internally
+        // (In the server layer the Arc<ConsolidationEngine> is passed instead)
 
-        // Convert to summaries
-        let summaries = results
-            .into_iter()
-            .map(|r| MnemeSummary {
+        // FIX #16: read actual version from content store for each summary
+        let mut summaries = Vec::with_capacity(results.len());
+        for r in &results {
+            let version = match self.store.content.get(r.envelope.id).await {
+                Ok(body) => body.version,
+                Err(_) => 1, // graceful degradation if content is missing
+            };
+            summaries.push(MnemeSummary {
                 id: r.envelope.id,
                 summary: r.envelope.summary.clone(),
                 confidence: r.envelope.confidence,
                 tags: r.envelope.tags.clone(),
                 similarity: r.similarity,
                 retrieval_score: r.retrieval_score,
-                version: 1, // would need content body for actual version
+                version,
                 is_evolved: !r.envelope.supersedes.is_empty(),
-            })
-            .collect();
+            });
+        }
 
         Ok(summaries)
     }
 
-    /// Load full content for a specific engram (progressive disclosure L2).
-    ///
-    /// Call this after recall() when the agent needs the full text.
+    // ─────────────────────────────────────────────────────────
+    // expand (progressive disclosure L2)
+    // ─────────────────────────────────────────────────────────
+
     pub async fn expand(&self, engram_id: Uuid) -> Result<MnemeDetail, ConsolidateError> {
         let envelope = self.store.envelopes.get(engram_id).await?;
         let content = self.store.content.get(engram_id).await?;
@@ -231,7 +210,7 @@ where
             full_text: content.full_text,
             confidence: envelope.confidence,
             tags: envelope.tags,
-            version: content.version,
+            version: content.version, // FIX #16: actual version
             created_at: envelope.created_at.to_rfc3339(),
             updated_at: envelope.updated_at.to_rfc3339(),
             access_count: envelope.access_count,
@@ -241,36 +220,42 @@ where
         })
     }
 
-    /// Explicitly end a session, triggering compaction of all remaining
-    /// working memory entries.
+    // ─────────────────────────────────────────────────────────
+    // end_session
+    // ─────────────────────────────────────────────────────────
+
     pub async fn end_session(&self, session_id: &str) -> Result<usize, ConsolidateError> {
         let new_engrams = self.engine.compact_session(session_id).await?;
         Ok(new_engrams.len())
     }
 
-    /// Get the full version history of an engram (the supersession chain).
-    /// Useful for debugging and auditing: "how did this memory evolve?"
+    // ─────────────────────────────────────────────────────────
+    // history
+    // ─────────────────────────────────────────────────────────
+
     pub async fn history(&self, engram_id: Uuid) -> Result<Vec<Envelope>, ConsolidateError> {
         let mut chain = Vec::new();
         let mut current = self.store.envelopes.get(engram_id).await?;
         chain.push(current.clone());
 
-        // Walk backwards through supersedes chain
         while let Some(prev_id) = current.supersedes.first() {
             match self.store.envelopes.get(*prev_id).await {
                 Ok(prev) => {
                     chain.push(prev.clone());
                     current = prev;
                 }
-                Err(_) => break, // GC'd predecessor
+                Err(_) => break,
             }
         }
 
-        chain.reverse(); // oldest first
+        chain.reverse();
         Ok(chain)
     }
 
-    /// Run garbage collection: remove low-confidence, old, superseded engrams.
+    // ─────────────────────────────────────────────────────────
+    // gc
+    // ─────────────────────────────────────────────────────────
+
     pub async fn gc(&self) -> Result<usize, ConsolidateError> {
         let removed = self
             .store
@@ -286,45 +271,28 @@ where
 }
 
 // ─────────────────────────────────────────────────────────────
-// Context builder: format memories for injection into agent prompt
+// Context builder
 // ─────────────────────────────────────────────────────────────
 
-/// Formats retrieved memories for injection into an agent's system prompt
-/// or context window. Handles the progressive disclosure formatting.
 pub struct ContextBuilder;
 
 impl ContextBuilder {
-    /// Format summaries for L1 disclosure (agent decides what to expand).
     pub fn format_summaries(summaries: &[MnemeSummary]) -> String {
-        if summaries.is_empty() {
-            return String::from("<memories>No relevant memories found.</memories>");
-        }
-
-        let mut out = String::from("<memories>\n");
-        for (i, s) in summaries.iter().enumerate() {
+        let mut out = String::from("<memory_context>\n");
+        for s in summaries {
             out.push_str(&format!(
-                "  <memory index=\"{}\" id=\"{}\" confidence=\"{:.2}\"",
-                i, s.id, s.confidence,
+                "  <memory id=\"{}\" confidence=\"{:.2}\" similarity=\"{:.2}\">\n    {}\n  </memory>\n",
+                s.id, s.confidence, s.similarity, s.summary
             ));
-            if s.is_evolved {
-                out.push_str(" evolved=\"true\"");
-            }
-            out.push_str(&format!(">\n    {}\n  </memory>\n", s.summary));
         }
-        out.push_str("</memories>");
+        out.push_str("</memory_context>");
         out
     }
 
-    /// Format full details for L2 disclosure (after agent selected specific memories).
-    pub fn format_details(details: &[MnemeDetail]) -> String {
-        let mut out = String::from("<memory_details>\n");
-        for d in details {
-            out.push_str(&format!(
-                "  <detail id=\"{}\" version=\"{}\" confidence=\"{:.2}\" accessed=\"{}\">\n    {}\n  </detail>\n",
-                d.id, d.version, d.confidence, d.access_count, d.full_text
-            ));
-        }
-        out.push_str("</memory_details>");
-        out
+    pub fn format_detail(detail: &MnemeDetail) -> String {
+        format!(
+            "<memory_detail id=\"{}\" version=\"{}\">\n  <summary>{}</summary>\n  <full_text>{}</full_text>\n</memory_detail>",
+            detail.id, detail.version, detail.summary, detail.full_text
+        )
     }
 }

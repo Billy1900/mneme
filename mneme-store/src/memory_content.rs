@@ -6,19 +6,20 @@
 use async_trait::async_trait;
 use mneme_core::*;
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
 use crate::{ContentStore, StoreError};
 
+#[derive(Clone)]
 pub struct InMemoryContentStore {
-    bodies: RwLock<HashMap<Uuid, ContentBody>>,
+    bodies: Arc<RwLock<HashMap<Uuid, ContentBody>>>,
 }
 
 impl InMemoryContentStore {
     pub fn new() -> Self {
         Self {
-            bodies: RwLock::new(HashMap::new()),
+            bodies: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }

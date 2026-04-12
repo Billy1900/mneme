@@ -1,27 +1,16 @@
-//! Concrete LLM implementations for the consolidation engine.
-//!
-//! - `AnthropicLLM`: Claude via the Anthropic API (production)
-//! - `MockLLM`: deterministic responses for testing
+//! LLM backends for consolidation.
 
 use async_trait::async_trait;
 
 use crate::{ConsolidateError, ConsolidationLLM};
 
 // ─────────────────────────────────────────────────────────────
-// Anthropic Claude LLM
+// Anthropic LLM (production)
 // ─────────────────────────────────────────────────────────────
 
-/// Claude via the Anthropic Messages API.
-///
-/// Used for consolidation judgments: synthesis, evolution evaluation,
-/// coexistence analysis, and merge operations.
-///
-/// Uses claude-sonnet-4-20250514 by default for cost efficiency
-/// during frequent consolidation operations.
 pub struct AnthropicLLM {
     api_key: String,
     model: String,
-    max_tokens: u32,
     client: reqwest::Client,
 }
 
@@ -30,7 +19,6 @@ impl AnthropicLLM {
         Self {
             api_key,
             model: "claude-sonnet-4-20250514".to_string(),
-            max_tokens: 1024,
             client: reqwest::Client::new(),
         }
     }
@@ -39,7 +27,6 @@ impl AnthropicLLM {
         Self {
             api_key,
             model: model.to_string(),
-            max_tokens: 1024,
             client: reqwest::Client::new(),
         }
     }
@@ -50,14 +37,8 @@ impl ConsolidationLLM for AnthropicLLM {
     async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
         let body = serde_json::json!({
             "model": self.model,
-            "max_tokens": self.max_tokens,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "system": "You are a memory consolidation engine. Always respond with valid JSON only. No markdown, no preamble, no explanation outside the JSON object."
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": prompt}],
         });
 
         let response = self
@@ -88,14 +69,13 @@ impl ConsolidationLLM for AnthropicLLM {
             .await
             .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
 
-        // Extract text from the first content block
         let text = data["content"]
             .as_array()
             .and_then(|arr| arr.first())
             .and_then(|block| block["text"].as_str())
             .ok_or_else(|| ConsolidateError::LLM("no text in response".into()))?;
 
-        // Strip any markdown code fences the model might add
+        // Strip any markdown code fences
         let cleaned = text
             .trim()
             .strip_prefix("```json")
@@ -115,13 +95,7 @@ impl ConsolidationLLM for AnthropicLLM {
 // Mock LLM (for testing)
 // ─────────────────────────────────────────────────────────────
 
-/// Deterministic LLM for testing consolidation logic.
-///
-/// Returns pre-configured responses based on the prompt content.
-/// Allows testing compaction, evolution, and conflict resolution
-/// without making API calls.
 pub struct MockLLM {
-    /// Default response when no specific pattern matches.
     default_response: String,
 }
 
@@ -154,9 +128,7 @@ impl Default for MockLLM {
 #[async_trait]
 impl ConsolidationLLM for MockLLM {
     async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
-        // Pattern match on prompt content to return appropriate mock responses
-        if prompt.contains("reconsolidation engine") || prompt.contains("should be updated") {
-            // Evolution evaluation prompt
+        if prompt.contains("reconsolidation engine") {
             if prompt.contains("CONFLICT_TRIGGER") {
                 return Ok(serde_json::json!({
                     "decision": "conflict",
@@ -165,45 +137,42 @@ impl ConsolidationLLM for MockLLM {
                 })
                 .to_string());
             }
+            if prompt.contains("UPDATE_TRIGGER") {
+                return Ok(serde_json::json!({
+                    "decision": "update",
+                    "reasoning": "Mock: update needed",
+                    "updated_text": "Mock updated memory text",
+                    "updated_summary": "Mock updated summary",
+                    "confidence_adjustment": 0.05
+                })
+                .to_string());
+            }
             return Ok(serde_json::json!({
                 "decision": "keep",
                 "reasoning": "Mock: memory is still accurate",
-                "confidence_adjustment": 0.05
+                "confidence_adjustment": 0.0
             })
             .to_string());
         }
 
-        if prompt.contains("contradict each other") || prompt.contains("Determine the relationship") {
-            // Conflict resolution evaluation
+        if prompt.contains("evolution engine") {
             return Ok(serde_json::json!({
-                "relationship": "factual_update",
-                "reasoning": "Mock: newer information supersedes older"
-            })
-            .to_string());
-        }
-
-        if prompt.contains("Merge two related memories") {
-            // Merge prompt
-            return Ok(serde_json::json!({
-                "full_text": "Mock merged memory combining both sources",
-                "summary": "Mock merged summary",
+                "full_text": "Mock evolved memory combining old and new evidence",
+                "summary": "Mock evolved summary",
                 "confidence": 0.85
             })
             .to_string());
         }
 
-        if prompt.contains("new evidence has arrived") {
-            // Evolution with new evidence
+        if prompt.contains("conflict") || prompt.contains("contradiction") {
             return Ok(serde_json::json!({
-                "full_text": "Mock evolved memory with new evidence",
-                "summary": "Mock evolved summary",
-                "confidence": 0.8,
-                "change_type": "extended"
+                "strategy": "temporal_supersede",
+                "reasoning": "Mock: newer evidence supersedes older",
+                "winner_index": 1
             })
             .to_string());
         }
 
-        // Default: synthesis/compaction prompt
         Ok(self.default_response.clone())
     }
 }

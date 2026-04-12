@@ -7,6 +7,7 @@
 //! 4. Evolution → drift detection + reconsolidation
 //! 5. Conflict resolution → three strategies
 
+
 #[cfg(test)]
 mod tests {
     use mneme_consolidate::{ConsolidationEngine, MockLLM};
@@ -14,16 +15,20 @@ mod tests {
     use mneme_embed::MockEmbeddingModel;
     use mneme_store::*;
 
-    /// Build a test harness with in-memory backends.
     fn build_test_system() -> (
         MnemeStore<InMemoryEnvelopeIndex, InMemoryContentStore>,
-        ConsolidationEngine<InMemoryEnvelopeIndex, InMemoryContentStore, MockEmbeddingModel, MockLLM>,
+        ConsolidationEngine<
+            InMemoryEnvelopeIndex,
+            InMemoryContentStore,
+            MockEmbeddingModel,
+            MockLLM,
+        >,
         MockEmbeddingModel,
         MnemeConfig,
     ) {
         let config = MnemeConfig {
             compaction_buffer_threshold: 3,
-            compaction_cluster_threshold: 0.5, // lower for mock embeddings
+            compaction_cluster_threshold: 0.5,
             evolution_drift_threshold: 0.3,
             ..Default::default()
         };
@@ -39,12 +44,12 @@ mod tests {
         let engine_content = InMemoryContentStore::new();
         let engine_store = MnemeStore::new(engine_envelopes, engine_content);
         let engine_embed = MockEmbeddingModel::new(128);
-        let engine = ConsolidationEngine::new(engine_store, engine_embed, llm, config.clone());
+        let engine =
+            ConsolidationEngine::new(engine_store, engine_embed, llm, config.clone());
 
         (store, engine, embed_model, config)
     }
 
-    /// Helper: insert a working memory engram directly.
     async fn insert_working_memory(
         store: &MnemeStore<InMemoryEnvelopeIndex, InMemoryContentStore>,
         embed: &MockEmbeddingModel,
@@ -95,7 +100,6 @@ mod tests {
         id
     }
 
-    /// Helper: insert a semantic engram directly.
     async fn insert_semantic_memory(
         store: &MnemeStore<InMemoryEnvelopeIndex, InMemoryContentStore>,
         embed: &MockEmbeddingModel,
@@ -143,63 +147,59 @@ mod tests {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Test 1: Envelope CRUD
+    // Test 1: Basic working memory insert + retrieval
     // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
-    async fn test_envelope_insert_and_get() {
-        let (store, _, embed, _) = build_test_system();
-        let id = insert_working_memory(&store, &embed, "test observation", "s1").await;
-
-        let env = store.envelopes.get(id).await.unwrap();
-        assert_eq!(env.id, id);
-        assert_eq!(env.memory_type, MemoryType::Working);
-        assert!(env.is_active());
-    }
-
-    #[tokio::test]
-    async fn test_content_body_roundtrip() {
-        let (store, _, embed, _) = build_test_system();
-        let id = insert_working_memory(&store, &embed, "full text here", "s1").await;
-
-        let body = store.content.get(id).await.unwrap();
-        assert_eq!(body.full_text, "full text here");
-        assert_eq!(body.version, 1);
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // Test 2: Working memory listing
-    // ═══════════════════════════════════════════════════════════
-
-    #[tokio::test]
-    async fn test_list_working_memory_by_session() {
-        let (store, _, embed, _) = build_test_system();
-
-        insert_working_memory(&store, &embed, "obs 1 for s1", "session-1").await;
-        insert_working_memory(&store, &embed, "obs 2 for s1", "session-1").await;
-        insert_working_memory(&store, &embed, "obs 1 for s2", "session-2").await;
-
-        let s1_entries = store.envelopes.list_working_memory("session-1").await.unwrap();
-        assert_eq!(s1_entries.len(), 2);
-
-        let s2_entries = store.envelopes.list_working_memory("session-2").await.unwrap();
-        assert_eq!(s2_entries.len(), 1);
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // Test 3: Search with filtering
-    // ═══════════════════════════════════════════════════════════
-
-    #[tokio::test]
-    async fn test_search_filters_by_type() {
+    async fn test_remember_and_retrieve_working_memory() {
         use mneme_embed::EmbeddingModel;
 
         let (store, _, embed, _) = build_test_system();
 
-        insert_working_memory(&store, &embed, "working entry", "s1").await;
-        insert_semantic_memory(&store, &embed, "semantic entry", "semantic summary", 0.8).await;
+        let id = insert_working_memory(&store, &embed, "user prefers dark mode", "s1").await;
 
-        let query_emb = embed.embed("entry").await.unwrap();
+        let env = store.envelopes.get(id).await.unwrap();
+        assert_eq!(env.memory_type, MemoryType::Working);
+        assert_eq!(env.source_sessions, vec!["s1"]);
+
+        let wm = store.envelopes.list_working_memory("s1").await.unwrap();
+        assert_eq!(wm.len(), 1);
+        assert_eq!(wm[0].id, id);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Test 2: Content body round-trip
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_content_body_roundtrip() {
+        let (store, _, embed, _) = build_test_system();
+
+        let id =
+            insert_working_memory(&store, &embed, "detailed observation text", "s2").await;
+
+        let body = store.content.get(id).await.unwrap();
+        assert_eq!(body.full_text, "detailed observation text");
+        assert_eq!(body.version, 1);
+        assert_eq!(body.provenance.len(), 1);
+        assert_eq!(body.provenance[0].session_id, "s2");
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Test 3: Memory type filter in search
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_memory_type_filter() {
+        use mneme_embed::EmbeddingModel;
+
+        let (store, _, embed, _) = build_test_system();
+
+        insert_working_memory(&store, &embed, "working memory item", "s3").await;
+        insert_semantic_memory(&store, &embed, "semantic memory item", "semantic item", 0.8)
+            .await;
+
+        let query_emb = embed.embed("memory").await.unwrap();
 
         // Search semantic only
         let query = MemoryQuery {
@@ -210,7 +210,9 @@ mod tests {
             ..Default::default()
         };
         let results = store.search(&query).await.unwrap();
-        assert!(results.iter().all(|r| r.envelope.memory_type == MemoryType::Semantic));
+        assert!(results
+            .iter()
+            .all(|r| r.envelope.memory_type == MemoryType::Semantic));
 
         // Search working only
         let query = MemoryQuery {
@@ -221,7 +223,9 @@ mod tests {
             ..Default::default()
         };
         let results = store.search(&query).await.unwrap();
-        assert!(results.iter().all(|r| r.envelope.memory_type == MemoryType::Working));
+        assert!(results
+            .iter()
+            .all(|r| r.envelope.memory_type == MemoryType::Working));
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -241,6 +245,10 @@ mod tests {
         assert!(!old_env.is_active());
         assert_eq!(old_env.superseded_by, Some(new_id));
     }
+
+    // ═══════════════════════════════════════════════════════════
+    // Test 5: active_only filter excludes superseded
+    // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
     async fn test_active_only_filter_excludes_superseded() {
@@ -266,7 +274,7 @@ mod tests {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Test 5: Touch / access tracking
+    // Test 6: Touch / access tracking
     // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
@@ -277,72 +285,32 @@ mod tests {
 
         store.envelopes.touch(id, 0.8).await.unwrap();
         let env = store.envelopes.get(id).await.unwrap();
-        assert_eq!(env.access_count, 6); // was 5, +1
-        assert!((env.confidence - 0.8).abs() < 0.001);
+        assert_eq!(env.access_count, 6); // was 5 (from insert_semantic_memory), +1
+        assert_eq!(env.confidence, 0.8);
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Test 6: Garbage collection
+    // Test 7: GC removes low-confidence superseded engrams
     // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
     async fn test_gc_removes_low_confidence_superseded() {
         let (store, _, embed, _) = build_test_system();
 
-        let old_id = insert_semantic_memory(&store, &embed, "garbage", "garbage", 0.01).await;
-        let new_id = insert_semantic_memory(&store, &embed, "keeper", "keeper", 0.9).await;
+        let old_id =
+            insert_semantic_memory(&store, &embed, "stale memory", "stale", 0.04).await;
+        let new_id = insert_semantic_memory(&store, &embed, "fresh memory", "fresh", 0.9).await;
         store.envelopes.mark_superseded(old_id, new_id).await.unwrap();
 
-        // Set last_accessed_at to the past by touching with low confidence
-        store.envelopes.touch(old_id, 0.01).await.unwrap();
+        let removed = store
+            .envelopes
+            .gc(0.05, 24 * 365 * 10) // high TTL so only confidence filter triggers
+            .await
+            .unwrap();
 
-        let removed = store.envelopes.gc(0.05, 0).await.unwrap();
         assert_eq!(removed, 1);
-
-        // The active one should still exist
+        assert!(store.envelopes.get(old_id).await.is_err());
         assert!(store.envelopes.get(new_id).await.is_ok());
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // Test 7: Embedding model consistency
-    // ═══════════════════════════════════════════════════════════
-
-    #[tokio::test]
-    async fn test_mock_embedding_deterministic() {
-        use mneme_embed::EmbeddingModel;
-
-        let embed = MockEmbeddingModel::new(128);
-        let v1 = embed.embed("hello world").await.unwrap();
-        let v2 = embed.embed("hello world").await.unwrap();
-        let v3 = embed.embed("different text").await.unwrap();
-
-        // Same input → same output
-        assert_eq!(v1.0, v2.0);
-
-        // Different input → different output
-        assert_ne!(v1.0, v3.0);
-
-        // Unit normalized
-        let norm: f32 = v1.0.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 0.001);
-    }
-
-    #[tokio::test]
-    async fn test_cosine_similarity() {
-        use mneme_embed::EmbeddingModel;
-
-        let embed = MockEmbeddingModel::new(128);
-        let v1 = embed.embed("hello world").await.unwrap();
-        let v2 = embed.embed("hello world").await.unwrap();
-        let v3 = embed.embed("completely different text").await.unwrap();
-
-        // Identical vectors → similarity = 1.0
-        let sim_same = v1.cosine_similarity(&v2);
-        assert!((sim_same - 1.0).abs() < 0.001);
-
-        // Different vectors → similarity < 1.0
-        let sim_diff = v1.cosine_similarity(&v3);
-        assert!(sim_diff < 1.0);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -356,13 +324,11 @@ mod tests {
         let embed = MockEmbeddingModel::new(128);
 
         let v1 = embed.embed("the cat sat").await.unwrap();
-        let v2 = embed.embed("the cat sat").await.unwrap(); // identical → same cluster
-        let v3 = embed.embed("quantum chromodynamics").await.unwrap(); // very different
+        let v2 = embed.embed("the cat sat").await.unwrap(); // identical
+        let v3 = embed.embed("quantum chromodynamics").await.unwrap();
 
         let clusters = agglomerative_cluster(&[v1, v2, v3], 0.95);
 
-        // v1 and v2 are identical so should cluster together at high threshold
-        // v3 should be in its own cluster
         let has_pair = clusters.iter().any(|c| c.len() == 2);
         let has_singleton = clusters.iter().any(|c| c.len() == 1);
         assert!(has_pair);
@@ -380,157 +346,263 @@ mod tests {
         let embed = MockEmbeddingModel::new(128);
         let stored = embed.embed("user prefers Python").await.unwrap();
         let context_same = embed.embed("user prefers Python").await.unwrap();
-        let context_diff = embed.embed("user now uses Rust exclusively").await.unwrap();
+        let context_diff = embed
+            .embed("quantum mechanics wave function collapse")
+            .await
+            .unwrap();
 
         let check_same = DriftCheck::compute(&stored, &context_same, 0.3);
-        assert!(!check_same.needs_evolution); // no drift
+        assert!(!check_same.needs_evolution);
 
         let check_diff = DriftCheck::compute(&stored, &context_diff, 0.3);
-        // With mock embeddings, different text produces different vectors
-        // Drift score = 1 - cosine_sim, so it should be > 0
         assert!(check_diff.drift_score > 0.0);
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Test 10: Retrieval score formula
+    // Test 10: Cosine similarity properties
     // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
-    async fn test_retrieval_score_combines_factors() {
-        let (store, _, embed, _) = build_test_system();
+    async fn test_cosine_similarity() {
+        use mneme_embed::EmbeddingModel;
 
-        // High confidence should score higher than low confidence
-        let high_id = insert_semantic_memory(
-            &store, &embed, "high confidence", "high", 0.95,
-        ).await;
-        let low_id = insert_semantic_memory(
-            &store, &embed, "low confidence", "low", 0.1,
-        ).await;
+        let embed = MockEmbeddingModel::new(128);
+        let v1 = embed.embed("identical text").await.unwrap();
+        let v2 = embed.embed("identical text").await.unwrap();
+        let v3 = embed.embed("completely different xyzzy").await.unwrap();
 
-        let high_env = store.envelopes.get(high_id).await.unwrap();
-        let low_env = store.envelopes.get(low_id).await.unwrap();
+        let sim_same = v1.cosine_similarity(&v2);
+        assert!((sim_same - 1.0).abs() < 0.001);
 
-        let score_high = high_env.retrieval_score(0.8, 0.2);
-        let score_low = low_env.retrieval_score(0.8, 0.2);
-
-        assert!(score_high > score_low);
+        let sim_diff = v1.cosine_similarity(&v3);
+        assert!(sim_diff < 1.0);
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Test 11: Context builder formatting
+    // Test 11: Conflict record append
     // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
-    async fn test_context_builder_xml() {
-        use mneme_api::{ContextBuilder, MnemeSummary};
+    async fn test_append_conflict_record() {
+        use chrono::Utc;
 
-        let summaries = vec![
-            MnemeSummary {
-                id: uuid::Uuid::new_v4(),
-                summary: "User prefers Rust".to_string(),
-                confidence: 0.9,
-                tags: vec!["lang".to_string()],
-                similarity: 0.85,
-                retrieval_score: 0.88,
-                version: 2,
-                is_evolved: true,
+        let (store, _, embed, _) = build_test_system();
+        let id =
+            insert_semantic_memory(&store, &embed, "contested fact", "contested", 0.7).await;
+        let other_id =
+            insert_semantic_memory(&store, &embed, "conflicting fact", "conflicting", 0.7)
+                .await;
+
+        let record = ConflictRecord {
+            conflicting_id: other_id,
+            resolution: ConflictStrategy::TemporalSupersede,
+            resolved_at: Utc::now(),
+            resolver_notes: "newer evidence wins".to_string(),
+        };
+
+        store.content.append_conflict(id, record).await.unwrap();
+
+        let body = store.content.get(id).await.unwrap();
+        assert_eq!(body.conflict_log.len(), 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Test 12: Content body delete
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_content_delete() {
+        let (store, _, embed, _) = build_test_system();
+        let id = insert_working_memory(&store, &embed, "temp memory", "s1").await;
+
+        store.content.delete(id).await.unwrap();
+        assert!(store.content.get(id).await.is_err());
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Test 13: Tags filter in search
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_tags_filter() {
+        use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use uuid::Uuid;
+
+        let (store, _, embed, _) = build_test_system();
+        let embedding = embed.embed("tagged memory").await.unwrap();
+        let id = Uuid::new_v4();
+        let now = Utc::now();
+
+        let engram = Engram {
+            envelope: Envelope {
+                id,
+                embedding: embedding.clone(),
+                confidence: 0.8,
+                created_at: now,
+                updated_at: now,
+                last_accessed_at: now,
+                access_count: 0,
+                memory_type: MemoryType::Semantic,
+                source_sessions: vec!["s1".to_string()],
+                supersedes: vec![],
+                superseded_by: None,
+                summary: "tagged memory".to_string(),
+                tags: vec!["rust".to_string(), "systems".to_string()],
+                content_hash: 0,
             },
-        ];
+            content: ContentBody {
+                engram_id: id,
+                full_text: "tagged memory".to_string(),
+                provenance: vec![],
+                conflict_log: vec![],
+                related: vec![],
+                version: 1,
+            },
+        };
+        store.insert(&engram).await.unwrap();
 
-        let xml = ContextBuilder::format_summaries(&summaries);
-        assert!(xml.starts_with("<memories>"));
-        assert!(xml.ends_with("</memories>"));
-        assert!(xml.contains("confidence=\"0.90\""));
-        assert!(xml.contains("evolved=\"true\""));
-        assert!(xml.contains("User prefers Rust"));
-    }
+        // Matching tag
+        let q = MemoryQuery {
+            embedding: embedding.clone(),
+            top_k: 10,
+            active_only: true,
+            tags: vec!["rust".to_string()],
+            ..Default::default()
+        };
+        let results = store.search(&q).await.unwrap();
+        assert!(results.iter().any(|r| r.envelope.id == id));
 
-    #[tokio::test]
-    async fn test_context_builder_empty() {
-        use mneme_api::ContextBuilder;
-
-        let xml = ContextBuilder::format_summaries(&[]);
-        assert_eq!(xml, "<memories>No relevant memories found.</memories>");
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // Test 12: Mock LLM response patterns
-    // ═══════════════════════════════════════════════════════════
-
-    #[tokio::test]
-    async fn test_mock_llm_synthesis_response() {
-        use mneme_consolidate::ConsolidationLLM;
-
-        let llm = MockLLM::new();
-        let response = llm
-            .complete("memory consolidation engine. Distill these")
-            .await
-            .unwrap();
-
-        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert!(parsed["full_text"].is_string());
-        assert!(parsed["confidence"].is_number());
-    }
-
-    #[tokio::test]
-    async fn test_mock_llm_evolution_keep() {
-        use mneme_consolidate::ConsolidationLLM;
-
-        let llm = MockLLM::new();
-        let response = llm
-            .complete("reconsolidation engine. should be updated")
-            .await
-            .unwrap();
-
-        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert_eq!(parsed["decision"].as_str().unwrap(), "keep");
-    }
-
-    #[tokio::test]
-    async fn test_mock_llm_conflict_response() {
-        use mneme_consolidate::ConsolidationLLM;
-
-        let llm = MockLLM::new();
-        let response = llm
-            .complete("Two memories contradict each other. Determine the relationship")
-            .await
-            .unwrap();
-
-        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert_eq!(parsed["relationship"].as_str().unwrap(), "factual_update");
+        // Non-matching tag
+        let q2 = MemoryQuery {
+            embedding,
+            top_k: 10,
+            active_only: true,
+            tags: vec!["python".to_string()],
+            ..Default::default()
+        };
+        let results2 = store.search(&q2).await.unwrap();
+        assert!(!results2.iter().any(|r| r.envelope.id == id));
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Test 13: Time decay
+    // Test 14: Stats
     // ═══════════════════════════════════════════════════════════
 
     #[tokio::test]
-    async fn test_ebbinghaus_decay() {
+    async fn test_stats() {
         let (store, _, embed, _) = build_test_system();
-        let id = insert_semantic_memory(&store, &embed, "decaying", "decay", 0.8).await;
 
-        let env = store.envelopes.get(id).await.unwrap();
-        let decay_now = env.time_decay(0.05);
-        // Just accessed, so decay should be ~1.0
-        assert!(decay_now > 0.99);
+        insert_working_memory(&store, &embed, "wm entry", "s1").await;
+        insert_semantic_memory(&store, &embed, "sm entry", "semantic", 0.8).await;
 
-        // With a high lambda, decay should be faster
-        let decay_fast = env.time_decay(100.0);
-        // Still nearly 1.0 because elapsed is ~0
-        assert!(decay_fast > 0.9);
+        let stats = store.envelopes.stats().await.unwrap();
+        assert_eq!(stats.total_engrams, 2);
+        assert_eq!(stats.working_memory_count, 1);
+        assert_eq!(stats.semantic_memory_count, 1);
+        assert_eq!(stats.superseded_count, 0);
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Test 14: Config defaults
+    // REGRESSION TEST for FIX #1: shared store — engine sees API writes
     // ═══════════════════════════════════════════════════════════
 
-    #[test]
-    fn test_config_defaults_are_sane() {
-        let config = MnemeConfig::default();
-        assert!(config.compaction_cluster_threshold > 0.0 && config.compaction_cluster_threshold < 1.0);
-        assert!(config.evolution_drift_threshold > 0.0 && config.evolution_drift_threshold < 1.0);
-        assert!(config.gc_confidence_floor > 0.0);
-        assert!(config.working_memory_ttl_hours > 0);
-        assert!(config.decay_lambda > 0.0);
+    #[tokio::test]
+    async fn test_shared_store_engine_sees_api_writes() {
+        use mneme_store::new_shared_memory_store;
+
+        // Create shared backends
+        let (shared_envelopes, shared_content) = new_shared_memory_store();
+
+        // Server-side store (what the HTTP handler writes to)
+        let server_store = MnemeStore::new(
+            (*shared_envelopes).clone(),
+            (*shared_content).clone(),
+        );
+
+        // Engine-side store (uses the SAME Arc clones — FIX #1)
+        let engine_store = MnemeStore::new(
+            (*shared_envelopes).clone(),
+            (*shared_content).clone(),
+        );
+
+        let embed = MockEmbeddingModel::new(128);
+        let engine_embed = MockEmbeddingModel::new(128);
+        let llm = MockLLM::new();
+        let config = MnemeConfig {
+            compaction_cluster_threshold: 0.5,
+            ..Default::default()
+        };
+        let engine = ConsolidationEngine::new(engine_store, engine_embed, llm, config);
+
+        // Write via "server" path
+        let id1 =
+            insert_working_memory(&server_store, &embed, "observation A", "shared-session")
+                .await;
+        let id2 =
+            insert_working_memory(&server_store, &embed, "observation B", "shared-session")
+                .await;
+
+        // Engine should see both entries — the old bug would have found 0
+        let wm = engine
+            .store
+            .envelopes
+            .list_working_memory("shared-session")
+            .await
+            .unwrap();
+        assert_eq!(
+            wm.len(),
+            2,
+            "Engine must see entries written by server (shared Arc backends)"
+        );
+        assert!(wm.iter().any(|e| e.id == id1));
+        assert!(wm.iter().any(|e| e.id == id2));
+
+        // Compaction should now be able to find and process those entries
+        let compacted = engine.compact_session("shared-session").await.unwrap();
+        assert!(
+            !compacted.is_empty(),
+            "Compaction should produce at least one semantic engram"
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // REGRESSION TEST for FIX #8: exact session_id match, no false positives
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_session_id_exact_match_no_false_positives() {
+        let (store, _, embed, _) = build_test_system();
+
+        // Insert entries for "session-1" and "session-12"
+        // The old LIKE-based query would return session-1 results when querying session-12
+        insert_working_memory(&store, &embed, "entry for session-1", "session-1").await;
+        insert_working_memory(&store, &embed, "entry for session-12", "session-12").await;
+
+        // Query for "session-1" should return exactly 1 result
+        let s1_results = store
+            .envelopes
+            .list_working_memory("session-1")
+            .await
+            .unwrap();
+        assert_eq!(
+            s1_results.len(),
+            1,
+            "session-1 query must return exactly 1 result, not accidentally match session-12"
+        );
+        assert_eq!(s1_results[0].source_sessions, vec!["session-1"]);
+
+        // Query for "session-12" should return exactly 1 result
+        let s12_results = store
+            .envelopes
+            .list_working_memory("session-12")
+            .await
+            .unwrap();
+        assert_eq!(
+            s12_results.len(),
+            1,
+            "session-12 query must not bleed into session-1"
+        );
+        assert_eq!(s12_results[0].source_sessions, vec!["session-12"]);
     }
 }

@@ -1143,6 +1143,21 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "mneme-tests"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "mneme-api",
+ "mneme-consolidate",
+ "mneme-core",
+ "mneme-embed",
+ "mneme-store",
+ "tokio",
  "uuid",
 ]
 

@@ -1,16 +1,11 @@
 //! # mneme-embed
 //!
 //! Embedding model abstraction + backends.
-//!
-//! Backends:
-//! - `MockEmbeddingModel`: deterministic hash-based vectors (testing)
-//! - `OpenAIEmbeddingModel`: text-embedding-3-small via API
 
 use async_trait::async_trait;
 use mneme_core::EmbeddingVec;
 
 pub mod backends;
-
 pub use backends::{MockEmbeddingModel, OpenAIEmbeddingModel};
 
 #[derive(Debug, thiserror::Error)]
