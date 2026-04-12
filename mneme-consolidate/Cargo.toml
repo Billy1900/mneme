@@ -1,0 +1,20 @@
+[package]
+name = "mneme-consolidate"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true }
+mneme-core = { path = "../mneme-core" }
+mneme-embed = { path = "../mneme-embed" }
+mneme-store = { path = "../mneme-store" }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+reqwest = { version = "0.12", features = ["json"], optional = true }
+
+[features]
+default = []
+anthropic = ["dep:reqwest"]

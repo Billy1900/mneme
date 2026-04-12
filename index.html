@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mneme — Reconsolidation-native memory for AI agents</title>
+<meta name="description" content="A Rust memory engine for AI agents built on three operations from cognitive neuroscience: compaction, evolution, and conflict resolution.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #FAFAF7;
+  --bg-warm: #F5F3EE;
+  --bg-code: #F0EDE6;
+  --text: #1A1A18;
+  --text-secondary: #6B6960;
+  --text-tertiary: #9C9889;
+  --accent: #C04828;
+  --accent-light: #FAECE7;
+  --teal: #0F6E56;
+  --teal-light: #E1F5EE;
+  --purple: #534AB7;
+  --purple-light: #EEEDFE;
+  --border: #E2DFD5;
+  --serif: 'Newsreader', Georgia, serif;
+  --sans: 'DM Sans', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141413;
+    --bg-warm: #1C1B19;
+    --bg-code: #222120;
+    --text: #E8E5DC;
+    --text-secondary: #9C9889;
+    --text-tertiary: #6B6960;
+    --accent: #E8693C;
+    --accent-light: #2A1610;
+    --teal: #5DCAA5;
+    --teal-light: #0A2A20;
+    --purple: #AFA9EC;
+    --purple-light: #1E1C3A;
+    --border: #2E2D28;
+  }
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--serif);
+  font-size: 18px;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent);
+  color: white;
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.wide-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ── Hero ── */
+.hero {
+  padding: 120px 0 80px;
+  text-align: center;
+}
+
+.hero-eyebrow {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 24px;
+  opacity: 0;
+  animation: fadeUp 0.6s 0.2s forwards;
+}
+
+.hero h1 {
+  font-family: var(--serif);
+  font-size: clamp(48px, 8vw, 80px);
+  font-weight: 300;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  margin-bottom: 8px;
+  opacity: 0;
+  animation: fadeUp 0.6s 0.4s forwards;
+}
+
+.hero h1 em {
+  font-style: italic;
+  font-weight: 400;
+}
+
+.hero-pronunciation {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin-bottom: 32px;
+  opacity: 0;
+  animation: fadeUp 0.6s 0.5s forwards;
+}
+
+.hero-sub {
+  font-size: 20px;
+  color: var(--text-secondary);
+  max-width: 560px;
+  margin: 0 auto 48px;
+  font-weight: 300;
+  opacity: 0;
+  animation: fadeUp 0.6s 0.6s forwards;
+}
+
+.hero-links {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  opacity: 0;
+  animation: fadeUp 0.6s 0.8s forwards;
+}
+
+.hero-links a {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 10px 28px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.btn-primary:hover { opacity: 0.85; }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover { border-color: var(--text-secondary); }
+
+/* ── Divider ── */
+.divider {
+  width: 40px;
+  height: 1px;
+  background: var(--border);
+  margin: 80px auto;
+}
+
+/* ── Sections ── */
+section { padding: 40px 0; }
+
+.section-num {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  display: block;
+}
+
+h2 {
+  font-family: var(--serif);
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.25;
+  margin-bottom: 24px;
+}
+
+h3 {
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+
+p + p { margin-top: 16px; }
+
+/* ── Thesis ── */
+.thesis {
+  font-size: 22px;
+  font-weight: 300;
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 60px 0;
+  font-style: italic;
+}
+
+.thesis strong {
+  font-weight: 400;
+  color: var(--text);
+  font-style: normal;
+}
+
+/* ── Comparison table ── */
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--sans);
+  font-size: 14px;
+  margin: 32px 0;
+}
+
+.comparison-table th {
+  text-align: left;
+  font-weight: 500;
+  padding: 12px 16px;
+  border-bottom: 2px solid var(--border);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.comparison-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.comparison-table tr:last-child td { border-bottom: none; }
+
+.comparison-table .label-col {
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.check { color: var(--teal); font-weight: 600; }
+.cross { color: var(--text-tertiary); }
+.highlight-col { background: var(--accent-light); }
+
+/* ── Operations cards ── */
+.ops-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  margin: 40px 0;
+}
+
+.op-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.op-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+
+.op-card.compact::before { background: var(--accent); }
+.op-card.evolve::before { background: var(--purple); }
+.op-card.resolve::before { background: var(--teal); }
+
+.op-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.op-card.compact .op-num { color: var(--accent); }
+.op-card.evolve .op-num { color: var(--purple); }
+.op-card.resolve .op-num { color: var(--teal); }
+
+.op-card h3 {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 400;
+  margin-bottom: 8px;
+}
+
+.op-card .op-zh {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-bottom: 16px;
+}
+
+.op-card p {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  font-family: var(--sans);
+}
+
+/* ── Code block ── */
+.code-block {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  overflow-x: auto;
+  margin: 24px 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.code-block .comment { color: var(--text-tertiary); }
+.code-block .keyword { color: var(--purple); }
+.code-block .string { color: var(--teal); }
+.code-block .fn { color: var(--accent); }
+
+/* ── Architecture diagram ── */
+.arch-diagram {
+  background: var(--bg-warm);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 48px 32px;
+  margin: 40px 0;
+  text-align: center;
+}
+
+.arch-layer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.arch-box {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  transition: transform 0.2s;
+}
+
+.arch-box:hover { transform: translateY(-2px); }
+
+.arch-box.core { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+.arch-box.store { border-color: var(--teal); background: var(--teal-light); color: var(--teal); }
+.arch-box.embed { border-color: var(--purple); background: var(--purple-light); color: var(--purple); }
+
+.arch-arrow {
+  font-size: 18px;
+  color: var(--text-tertiary);
+  margin: 4px 0;
+}
+
+.arch-label {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+  margin-top: 4px;
+}
+
+/* ── Neuroscience refs ── */
+.ref-list {
+  list-style: none;
+  counter-reset: ref;
+  margin: 24px 0;
+}
+
+.ref-list li {
+  counter-increment: ref;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  font-family: var(--sans);
+  color: var(--text-secondary);
+  display: flex;
+  gap: 16px;
+}
+
+.ref-list li:last-child { border-bottom: none; }
+
+.ref-list li::before {
+  content: counter(ref);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  min-width: 20px;
+  padding-top: 2px;
+}
+
+.ref-list .ref-title {
+  font-family: var(--serif);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.ref-list .ref-mechanism {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  display: inline-block;
+  margin-top: 4px;
+}
+
+/* ── Disclosure diagram ── */
+.disclosure-flow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  margin: 32px 0;
+  flex-wrap: wrap;
+}
+
+.disclosure-step {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.disclosure-step.l0 { background: var(--bg-code); color: var(--text-tertiary); }
+.disclosure-step.l1 { background: var(--teal-light); color: var(--teal); }
+.disclosure-step.l2 { background: var(--purple-light); color: var(--purple); }
+.disclosure-step.l3 { background: var(--accent-light); color: var(--accent); }
+
+.disclosure-arrow {
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+
+.disclosure-tokens {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 2px;
+}
+
+/* ── Footer ── */
+footer {
+  padding: 80px 0 48px;
+  text-align: center;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+footer a {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+footer a:hover { color: var(--text); }
+
+/* ── Animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s, transform 0.5s;
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .hero { padding: 80px 0 60px; }
+  .hero h1 { font-size: 40px; }
+  .hero-sub { font-size: 17px; }
+  .op-card { padding: 24px; }
+  h2 { font-size: 26px; }
+  .comparison-table { font-size: 12px; }
+  .comparison-table td, .comparison-table th { padding: 8px 10px; }
+  .disclosure-flow { flex-direction: column; }
+  .disclosure-arrow { transform: rotate(90deg); }
+}
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">Agent memory infrastructure</div>
+    <h1><em>Mneme</em></h1>
+    <div class="hero-pronunciation">/ˈniː.miː/ — Greek: memory</div>
+    <p class="hero-sub">
+      A Rust memory engine for AI agents that <strong>compresses</strong>, <strong>evolves</strong>,
+      and <strong>resolves conflicts</strong> in memories — implementing neuroscience mechanisms
+      no existing system has built.
+    </p>
+    <div class="hero-links">
+      <a href="https://github.com/user/mneme" class="btn-primary">View on GitHub</a>
+      <a href="#operations" class="btn-secondary">How it works</a>
+    </div>
+  </div>
+</header>
+
+<!-- Thesis -->
+<div class="container">
+  <p class="thesis reveal">
+    Every existing agent memory system treats memory as a <strong>database problem</strong> —
+    store, index, retrieve. Mneme treats memory as a <strong>living process</strong>.
+  </p>
+</div>
+
+<div class="divider"></div>
+
+<!-- Problem -->
+<section class="container reveal">
+  <span class="section-num">01 — The problem</span>
+  <h2>Current systems forget how to forget</h2>
+  <p>
+    Mem0 appends new facts and hopes the old ones fade. Zep builds a temporal graph but never
+    rewrites nodes. Letta lets the agent page memory in and out but never consolidates it.
+    None of them update a memory when it's retrieved in a new context — the mechanism
+    neuroscience calls <em>reconsolidation</em>.
+  </p>
+  <p>
+    The result: memory stores that grow without bound, accumulate contradictions,
+    and can't distinguish between "the user changed their mind" and "both things are true
+    in different contexts."
+  </p>
+</section>
+
+<div class="divider"></div>
+
+<!-- Comparison -->
+<section class="wide-container reveal">
+  <span class="section-num">02 — Landscape</span>
+  <h2>What's missing across the field</h2>
+
+  <div style="overflow-x: auto;">
+  <table class="comparison-table">
+    <thead>
+      <tr>
+        <th>Mechanism</th>
+        <th>Mem0</th>
+        <th>Zep</th>
+        <th>Letta</th>
+        <th class="highlight-col">Mneme</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="label-col">Reconsolidation</td>
+        <td class="cross">No</td>
+        <td class="cross">No</td>
+        <td class="cross">No</td>
+        <td class="highlight-col check">Drift-triggered</td>
+      </tr>
+      <tr>
+        <td class="label-col">Dual memory system</td>
+        <td class="cross">Single store</td>
+        <td class="cross">Single graph</td>
+        <td>3 tiers (manual)</td>
+        <td class="highlight-col check">Working + Semantic</td>
+      </tr>
+      <tr>
+        <td class="label-col">Conflict resolution</td>
+        <td>Latest wins</td>
+        <td class="cross">No</td>
+        <td class="cross">No</td>
+        <td class="highlight-col check">3 strategies</td>
+      </tr>
+      <tr>
+        <td class="label-col">Progressive disclosure</td>
+        <td class="cross">Load all</td>
+        <td class="cross">Load all</td>
+        <td>Agent pages</td>
+        <td class="highlight-col check">Envelope → Body</td>
+      </tr>
+      <tr>
+        <td class="label-col">Forgetting curve</td>
+        <td class="cross">No decay</td>
+        <td class="cross">No decay</td>
+        <td class="cross">No decay</td>
+        <td class="highlight-col check">Ebbinghaus decay</td>
+      </tr>
+      <tr>
+        <td class="label-col">Language</td>
+        <td>Python</td>
+        <td>Python</td>
+        <td>Python</td>
+        <td class="highlight-col">Rust</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Three Operations -->
+<section id="operations" class="container reveal">
+  <span class="section-num">03 — The three operations</span>
+  <h2>Compaction, evolution, conflict resolution</h2>
+  <p>
+    Three operations that map directly to mechanisms in cognitive neuroscience.
+    Together they transform a passive memory store into a living knowledge system.
+  </p>
+
+  <div class="ops-grid">
+    <div class="op-card compact reveal">
+      <div class="op-num">Operation 1</div>
+      <h3>Compaction</h3>
+      <div class="op-zh">记忆压缩</div>
+      <p>
+        Working memory entries from agent sessions get embedded, clustered by similarity,
+        and synthesized into semantic engrams via LLM. Raw observations become distilled knowledge.
+        If a similar semantic engram already exists, compaction routes to evolution instead.
+      </p>
+      <p style="margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--text-tertiary);">
+        Neuroscience: hippocampal → neocortical consolidation (CLS theory, McClelland et al. 1995)
+      </p>
+    </div>
+
+    <div class="op-card evolve reveal">
+      <div class="op-num">Operation 2</div>
+      <h3>Evolution</h3>
+      <div class="op-zh">记忆演化</div>
+      <p>
+        Every retrieval triggers a drift check — cosine distance between the stored embedding
+        and the current context. If drift exceeds a threshold, the LLM evaluates whether
+        the memory should update, creating a new version while preserving the full supersession chain.
+      </p>
+      <p style="margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--text-tertiary);">
+        Neuroscience: reconsolidation (Nader, Schafe & LeDoux, 2000)
+      </p>
+    </div>
+
+    <div class="op-card resolve reveal">
+      <div class="op-num">Operation 3</div>
+      <h3>Conflict resolution</h3>
+      <div class="op-zh">记忆冲突解决</div>
+      <p>
+        When two engrams contradict, the system selects from three strategies based on evidence
+        strength: <em>temporal supersede</em> (newer wins), <em>confidence merge</em> (synthesize both),
+        or <em>conditional coexist</em> (both true in different contexts). No existing system
+        makes this distinction.
+      </p>
+      <p style="margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--text-tertiary);">
+        Neuroscience: schema-dependent encoding (Bartlett, 1932)
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Progressive Disclosure -->
+<section class="container reveal">
+  <span class="section-num">04 — Token efficiency</span>
+  <h2>Progressive disclosure</h2>
+  <p>
+    Every memory is an Engram with two layers: a lightweight <em>envelope</em> (embedding + metadata + summary)
+    and a full <em>content body</em> (loaded on demand). Search touches thousands of envelopes;
+    the agent reads a handful of summaries; only 2-3 full bodies enter the context window.
+  </p>
+
+  <div class="disclosure-flow">
+    <div class="disclosure-step l0">
+      ANN search<br>
+      <span class="disclosure-tokens">~100 envelopes, 0.5ms</span>
+    </div>
+    <span class="disclosure-arrow">→</span>
+    <div class="disclosure-step l1">
+      Read summaries<br>
+      <span class="disclosure-tokens">~10 summaries, ~200 tokens</span>
+    </div>
+    <span class="disclosure-arrow">→</span>
+    <div class="disclosure-step l2">
+      Load content<br>
+      <span class="disclosure-tokens">~3 bodies, ~500 tokens</span>
+    </div>
+    <span class="disclosure-arrow">→</span>
+    <div class="disclosure-step l3">
+      Reconsolidate<br>
+      <span class="disclosure-tokens">async, non-blocking</span>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Architecture -->
+<section class="container reveal">
+  <span class="section-num">05 — Architecture</span>
+  <h2>Six crates, one workspace</h2>
+
+  <div class="arch-diagram">
+    <div class="arch-layer">
+      <div class="arch-box">mneme-server</div>
+    </div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-layer">
+      <div class="arch-box core">mneme-api</div>
+    </div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-layer">
+      <div class="arch-box core">mneme-consolidate</div>
+    </div>
+    <div class="arch-label">compact / evolve / resolve + LLM prompts</div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-layer">
+      <div class="arch-box store">mneme-store</div>
+      <div class="arch-box embed">mneme-embed</div>
+    </div>
+    <div class="arch-label">5 storage backends &nbsp;&middot;&nbsp; 2 embedding backends</div>
+    <div class="arch-arrow">↓</div>
+    <div class="arch-layer">
+      <div class="arch-box">mneme-core</div>
+    </div>
+    <div class="arch-label">Engram, Envelope, ContentBody, config</div>
+  </div>
+
+  <p>
+    The agent-facing API exposes four verbs: <code>remember()</code>, <code>recall()</code>,
+    <code>expand()</code>, and <code>end_session()</code>. Reconsolidation runs automatically
+    on every retrieval. Compaction fires on session end or buffer threshold.
+  </p>
+</section>
+
+<div class="divider"></div>
+
+<!-- Quick start -->
+<section class="container reveal">
+  <span class="section-num">06 — Quick start</span>
+  <h2>Four lines to persistent memory</h2>
+
+  <div class="code-block">
+<span class="comment">// During agent work session:</span>
+memory.<span class="fn">remember</span>(<span class="string">"User prefers Rust for systems"</span>, <span class="string">"s1"</span>).<span class="keyword">await</span>;
+memory.<span class="fn">remember</span>(<span class="string">"Building trading engine, sub-2ms latency"</span>, <span class="string">"s1"</span>).<span class="keyword">await</span>;
+
+<span class="comment">// When the agent needs context (returns summaries):</span>
+<span class="keyword">let</span> ctx = memory.<span class="fn">recall</span>(<span class="string">"what language for trading?"</span>, <span class="number">5</span>).<span class="keyword">await</span>;
+
+<span class="comment">// Progressive disclosure L2 — load full content:</span>
+<span class="keyword">let</span> detail = memory.<span class="fn">expand</span>(ctx[<span class="number">0</span>].id).<span class="keyword">await</span>;
+
+<span class="comment">// End session → compaction runs automatically:</span>
+memory.<span class="fn">end_session</span>(<span class="string">"s1"</span>).<span class="keyword">await</span>;
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Neuroscience -->
+<section class="container reveal">
+  <span class="section-num">07 — Foundations</span>
+  <h2>Built on neuroscience, not analogy</h2>
+  <p>
+    Most agent memory systems reference neuroscience metaphorically. Mneme implements
+    the actual mechanisms — with specific parameters mapped from the literature.
+  </p>
+
+  <ol class="ref-list">
+    <li>
+      <div>
+        <span class="ref-title">Complementary Learning Systems</span><br>
+        McClelland, McNaughton &amp; O'Reilly, 1995<br>
+        <span class="ref-mechanism">→ Working memory (fast) + Semantic memory (slow)</span>
+      </div>
+    </li>
+    <li>
+      <div>
+        <span class="ref-title">Memory reconsolidation</span><br>
+        Nader, Schafe &amp; LeDoux, 2000<br>
+        <span class="ref-mechanism">→ Drift-triggered evolution on every retrieval</span>
+      </div>
+    </li>
+    <li>
+      <div>
+        <span class="ref-title">The forgetting curve</span><br>
+        Ebbinghaus, 1885<br>
+        <span class="ref-mechanism">→ Confidence decay: time_decay(λ) = e^(-λt)</span>
+      </div>
+    </li>
+    <li>
+      <div>
+        <span class="ref-title">Working memory model</span><br>
+        Baddeley, 2000<br>
+        <span class="ref-mechanism">→ Progressive disclosure as attentional gating</span>
+      </div>
+    </li>
+    <li>
+      <div>
+        <span class="ref-title">Schema-dependent encoding</span><br>
+        Bartlett, 1932<br>
+        <span class="ref-mechanism">→ Context-dependent conflict resolution</span>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<div class="divider"></div>
+
+<!-- CTA -->
+<section class="container reveal" style="text-align:center;padding:60px 0 40px;">
+  <h2 style="margin-bottom:16px;">3,975 lines of Rust.<br>14 integration tests.<br>Zero Python.</h2>
+  <p style="color:var(--text-secondary);margin-bottom:32px;font-size:17px;">
+    MIT licensed. Framework-agnostic. Use as a library or HTTP server.
+  </p>
+  <div class="hero-links">
+    <a href="https://github.com/user/mneme" class="btn-primary">Get started</a>
+    <a href="https://github.com/user/mneme/blob/main/README.md" class="btn-secondary">Read the docs</a>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>Mneme is open source under the MIT license.</p>
+    <p style="margin-top:8px;">
+      <a href="https://github.com/user/mneme">GitHub</a> &nbsp;&middot;&nbsp;
+      <a href="https://github.com/user/mneme/blob/main/README.md">Documentation</a>
+    </p>
+  </div>
+</footer>
+
+<script>
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>

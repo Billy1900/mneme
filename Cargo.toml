@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = [
+    "mneme-core",        # Data types, traits, error types
+    "mneme-store",       # Storage backends (vector index + document store)
+    "mneme-consolidate", # The three operations: compact, evolve, resolve
+    "mneme-embed",       # Embedding model abstraction
+    "mneme-api",         # Public API surface (the interface agents use)
+    "mneme-server",      # HTTP server for multi-agent access
+]
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+tracing = "0.1"
+async-trait = "0.1"
+reqwest = { version = "0.12", features = ["json"] }
+
+# Integration tests
+[dev-dependencies]
+mneme-core = { path = "mneme-core" }
+mneme-store = { path = "mneme-store" }
+mneme-embed = { path = "mneme-embed" }
+mneme-consolidate = { path = "mneme-consolidate" }
+mneme-api = { path = "mneme-api" }
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }

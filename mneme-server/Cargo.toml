@@ -1,0 +1,23 @@
+[package]
+name = "mneme-server"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "mneme-server"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.7", features = ["json"] }
+mneme-api = { path = "../mneme-api" }
+mneme-consolidate = { path = "../mneme-consolidate" }
+mneme-core = { path = "../mneme-core" }
+mneme-embed = { path = "../mneme-embed" }
+mneme-store = { path = "../mneme-store" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { workspace = true }

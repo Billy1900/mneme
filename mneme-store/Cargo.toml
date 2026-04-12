@@ -1,0 +1,22 @@
+[package]
+name = "mneme-store"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true }
+mneme-core = { path = "../mneme-core" }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+# Optional backends
+rusqlite = { version = "0.31", features = ["bundled"], optional = true }
+qdrant-client = { version = "1.12", optional = true }
+serde = { workspace = true }
+
+[features]
+default = ["sqlite"]
+sqlite = ["dep:rusqlite"]
+qdrant = ["dep:qdrant-client"]

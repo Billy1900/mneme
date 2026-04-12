@@ -1,0 +1,13 @@
+[package]
+name = "mneme-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono = { workspace = true }
+mneme-consolidate = { path = "../mneme-consolidate" }
+mneme-core = { path = "../mneme-core" }
+mneme-embed = { path = "../mneme-embed" }
+mneme-store = { path = "../mneme-store" }
+tracing = { workspace = true }
+uuid = { workspace = true }
