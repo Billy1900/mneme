@@ -162,9 +162,53 @@ where
         &self,
         texts: &[&str],
         source_ids: &[Uuid],
-        _centroid: &EmbeddingVec,
+        centroid: &EmbeddingVec,
         session_id: &str,
     ) -> Result<Engram, ConsolidateError> {
+        // Fast path: single-element clusters don't need LLM synthesis.
+        // Just store the raw text directly as a semantic engram.
+        if texts.len() == 1 {
+            let id = Uuid::new_v4();
+            let now = Utc::now();
+            let full_text = texts[0].to_string();
+            let summary = if full_text.len() > 100 {
+                format!("{}...", &full_text[..97])
+            } else {
+                full_text.clone()
+            };
+            return Ok(Engram {
+                envelope: Envelope {
+                    id,
+                    embedding: centroid.clone(),
+                    confidence: 0.6,
+                    created_at: now,
+                    updated_at: now,
+                    last_accessed_at: now,
+                    access_count: 0,
+                    memory_type: MemoryType::Semantic,
+                    source_sessions: vec![session_id.to_string()],
+                    supersedes: source_ids.to_vec(),
+                    superseded_by: None,
+                    summary,
+                    tags: vec![],
+                    content_hash: seahash_str(&full_text),
+                },
+                content: ContentBody {
+                    engram_id: id,
+                    full_text,
+                    provenance: vec![ProvenanceRecord {
+                        session_id: session_id.to_string(),
+                        turn_id: None,
+                        timestamp: now,
+                        raw_excerpt: texts[0].to_string(),
+                    }],
+                    conflict_log: vec![],
+                    related: vec![],
+                    version: 1,
+                },
+            });
+        }
+
         let entries_block = texts
             .iter()
             .enumerate()
