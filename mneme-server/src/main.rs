@@ -46,7 +46,7 @@ use uuid::Uuid;
 //         compaction sees all API writes (was a split-store data-loss bug).
 // ─────────────────────────────────────────────────────────────
 
-struct AppState {
+pub struct AppState {
     /// The consolidation engine — holds Arc clones of the same backends
     /// as `envelopes` and `content` below.
     engine: ConsolidationEngine<
@@ -159,6 +159,16 @@ struct HistoryEntry {
 struct HistoryResponse {
     engram_id: String,
     versions: Vec<HistoryEntry>,
+}
+
+#[derive(Serialize)]
+struct ForgetResponse {
+    id: String,
+}
+
+#[derive(Serialize)]
+struct DecayResponse {
+    updated: usize,
 }
 
 #[derive(Serialize)]
@@ -513,6 +523,32 @@ async fn history(
     }))
 }
 
+async fn forget(
+    State(state): State<SharedState>,
+    Path(id_str): Path<String>,
+) -> Result<Json<ForgetResponse>, AppError> {
+    let id = Uuid::parse_str(&id_str).map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+    state
+        .envelopes
+        .delete(id)
+        .await
+        .map_err(|e| AppError::NotFound(e.to_string()))?;
+    // Best-effort content removal
+    let _ = state.content.delete(id).await;
+
+    Ok(Json(ForgetResponse { id: id.to_string() }))
+}
+
+async fn run_decay(State(state): State<SharedState>) -> Result<Json<DecayResponse>, AppError> {
+    let updated = state
+        .envelopes
+        .apply_decay(state.config.decay_lambda)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(Json(DecayResponse { updated }))
+}
+
 async fn run_gc(State(state): State<SharedState>) -> Result<Json<GcResponse>, AppError> {
     let removed = state
         .envelopes
@@ -580,6 +616,51 @@ async fn shutdown_signal() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// App builder — used by main and tests
+// ─────────────────────────────────────────────────────────────
+
+pub fn build_app(state: SharedState, api_key: Option<String>) -> Router {
+    let protected = Router::new()
+        .route("/remember", post(remember))
+        .route("/recall", post(recall))
+        .route("/expand/{id}", get(expand))
+        .route("/end_session", post(end_session))
+        .route("/history/{id}", get(history))
+        .route("/forget/{id}", axum::routing::delete(forget))
+        .route("/decay", post(run_decay))
+        .route("/gc", post(run_gc))
+        .route("/stats", get(stats))
+        .layer(middleware::from_fn_with_state(api_key, auth_middleware));
+
+    Router::new()
+        .route("/health", get(health))
+        .merge(protected)
+        .layer(CorsLayer::permissive())
+        .layer(TraceLayer::new_for_http())
+        .with_state(state)
+}
+
+pub fn build_state() -> SharedState {
+    let config = MnemeConfig::default();
+    let (shared_envelopes, shared_content) = new_shared_memory_store();
+    let engine_store = MnemeStore::new(
+        (*shared_envelopes).clone(),
+        (*shared_content).clone(),
+    );
+    let embed_model = MockEmbeddingModel::new(128);
+    let engine_embed = MockEmbeddingModel::new(128);
+    let llm = MockLLM::new();
+    let engine = ConsolidationEngine::new(engine_store, engine_embed, llm, config.clone());
+    Arc::new(AppState {
+        engine,
+        envelopes: shared_envelopes,
+        content: shared_content,
+        embed_model,
+        config,
+    })
+}
+
+// ─────────────────────────────────────────────────────────────
 // Main
 // ─────────────────────────────────────────────────────────────
 
@@ -592,21 +673,23 @@ async fn main() {
         )
         .init();
 
-    let config = MnemeConfig::default();
+    let state = build_state();
 
-    // FIX #1: create shared Arc'd backends so both the server and the engine
-    //         operate on the SAME in-memory store.
-    let (shared_envelopes, shared_content) = new_shared_memory_store();
-
-    // Build consolidation engine with Arc clones of the same backends
-    let engine_store = MnemeStore::new(
-        (*shared_envelopes).clone(), // InMemoryEnvelopeIndex: Clone + Default
-        (*shared_content).clone(),
-    );
-    let embed_model = MockEmbeddingModel::new(128);
-    let engine_embed = MockEmbeddingModel::new(128);
-    let llm = MockLLM::new();
-    let engine = ConsolidationEngine::new(engine_store, engine_embed, llm, config.clone());
+    // Spawn background Ebbinghaus decay task — runs every hour
+    {
+        let decay_envelopes = Arc::clone(&state.envelopes);
+        let decay_lambda = state.config.decay_lambda;
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+            loop {
+                interval.tick().await;
+                match decay_envelopes.apply_decay(decay_lambda).await {
+                    Ok(n) => tracing::info!(updated = n, "Scheduled confidence decay applied"),
+                    Err(e) => tracing::warn!("Decay task error: {}", e),
+                }
+            }
+        });
+    }
 
     // FIX #10: read optional API key from environment
     let api_key = std::env::var("MNEME_API_KEY").ok();
@@ -616,34 +699,7 @@ async fn main() {
         tracing::warn!("Auth disabled: MNEME_API_KEY not set — all requests accepted");
     }
 
-    let state = Arc::new(AppState {
-        engine,
-        envelopes: shared_envelopes,
-        content: shared_content,
-        embed_model,
-        config,
-    });
-
-    // FIX #13: /stats is now wired into the router
-    let protected = Router::new()
-        .route("/remember", post(remember))
-        .route("/recall", post(recall))
-        .route("/expand/{id}", get(expand))
-        .route("/end_session", post(end_session))
-        .route("/history/{id}", get(history))
-        .route("/gc", post(run_gc))
-        .route("/stats", get(stats)) // FIX #13
-        .layer(middleware::from_fn_with_state(
-            api_key,
-            auth_middleware,
-        ));
-
-    let app = Router::new()
-        .route("/health", get(health))
-        .merge(protected)
-        .layer(CorsLayer::permissive())
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
+    let app = build_app(state, api_key);
 
     let addr = "0.0.0.0:3377";
     tracing::info!("Mneme server listening on {}", addr);

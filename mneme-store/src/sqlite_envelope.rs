@@ -385,6 +385,22 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
         .map_err(|e| StoreError::VectorIndex(e.to_string()))?
     }
 
+    async fn delete(&self, id: Uuid) -> Result<(), StoreError> {
+        let conn = Arc::clone(&self.conn);
+        tokio::task::spawn_blocking(move || {
+            let conn = conn.lock().unwrap();
+            let n = conn
+                .execute("DELETE FROM envelopes WHERE id = ?1", params![id.to_string()])
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            if n == 0 {
+                return Err(StoreError::NotFound(id));
+            }
+            Ok::<_, StoreError>(())
+        })
+        .await
+        .map_err(|e| StoreError::VectorIndex(e.to_string()))?
+    }
+
     async fn touch(&self, id: Uuid, new_confidence: f32) -> Result<(), StoreError> {
         let conn = Arc::clone(&self.conn);
         tokio::task::spawn_blocking(move || {
@@ -396,6 +412,48 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
             )
             .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             Ok::<_, StoreError>(())
+        })
+        .await
+        .map_err(|e| StoreError::VectorIndex(e.to_string()))?
+    }
+
+    async fn apply_decay(&self, lambda: f64) -> Result<usize, StoreError> {
+        let conn = Arc::clone(&self.conn);
+        tokio::task::spawn_blocking(move || {
+            let conn = conn.lock().unwrap();
+            // Read all active envelopes, compute new confidence, batch-update
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, confidence, last_accessed_at FROM envelopes
+                     WHERE superseded_by IS NULL",
+                )
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+
+            let rows: Vec<(String, f32, String)> = stmt
+                .query_map([], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+
+            let now = Utc::now();
+            let mut updated = 0;
+            for (id, confidence, last_accessed_str) in rows {
+                let last_accessed = last_accessed_str
+                    .parse::<chrono::DateTime<Utc>>()
+                    .unwrap_or(now);
+                let hours = now.signed_duration_since(last_accessed).num_seconds() as f64 / 3600.0;
+                let decay = (-lambda * hours).exp();
+                let new_conf = ((confidence as f64 * decay) as f32).max(0.0);
+                conn.execute(
+                    "UPDATE envelopes SET confidence = ?1 WHERE id = ?2",
+                    params![new_conf, id],
+                )
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+                updated += 1;
+            }
+            Ok::<_, StoreError>(updated)
         })
         .await
         .map_err(|e| StoreError::VectorIndex(e.to_string()))?

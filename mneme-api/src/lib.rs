@@ -253,6 +253,37 @@ where
     }
 
     // ─────────────────────────────────────────────────────────
+    // forget
+    // ─────────────────────────────────────────────────────────
+
+    pub async fn forget(&self, engram_id: Uuid) -> Result<(), ConsolidateError> {
+        self.store
+            .envelopes
+            .delete(engram_id)
+            .await
+            .map_err(ConsolidateError::Store)?;
+        // Best-effort — content may already be absent
+        let _ = self.store.content.delete(engram_id).await;
+        info!(id = %engram_id, "Deleted engram");
+        Ok(())
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // decay — apply Ebbinghaus confidence decay to all active engrams
+    // ─────────────────────────────────────────────────────────
+
+    pub async fn decay(&self, lambda: f64) -> Result<usize, ConsolidateError> {
+        let updated = self
+            .store
+            .envelopes
+            .apply_decay(lambda)
+            .await
+            .map_err(ConsolidateError::Store)?;
+        info!(updated = updated, "Applied confidence decay");
+        Ok(updated)
+    }
+
+    // ─────────────────────────────────────────────────────────
     // gc
     // ─────────────────────────────────────────────────────────
 

@@ -335,6 +335,19 @@ impl EnvelopeIndex for QdrantEnvelopeIndex {
         Ok(0)
     }
 
+    async fn delete(&self, id: Uuid) -> Result<(), StoreError> {
+        self.client
+            .delete_points(
+                DeletePointsBuilder::new(COLLECTION_NAME)
+                    .points(PointsIdsList {
+                        ids: vec![id.to_string().into()],
+                    }),
+            )
+            .await
+            .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+        Ok(())
+    }
+
     async fn touch(&self, id: Uuid, new_confidence: f32) -> Result<(), StoreError> {
         let payload: HashMap<String, qdrant_client::qdrant::Value> = [
             ("last_accessed_at".to_string(), Utc::now().to_rfc3339().into()),
@@ -352,5 +365,34 @@ impl EnvelopeIndex for QdrantEnvelopeIndex {
 
         // access_count increment requires read-modify-write (Qdrant limitation)
         Ok(())
+    }
+
+    async fn apply_decay(&self, _lambda: f64) -> Result<usize, StoreError> {
+        // Qdrant does not support server-side arithmetic updates on payload fields.
+        // A production implementation would scroll all active points and batch-update
+        // confidence via set_payload in pages. Skipped here — use SQLite backend
+        // for single-node deployments where decay is needed.
+        Ok(0)
+    }
+
+    async fn stats(&self) -> Result<crate::StoreStats, StoreError> {
+        // Qdrant collection info gives total count; detailed breakdown requires
+        // filtered scroll queries. Return a best-effort summary.
+        let info = self
+            .client
+            .collection_info(COLLECTION_NAME)
+            .await
+            .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+        let total = info
+            .result
+            .map(|r| r.points_count.unwrap_or(0) as usize)
+            .unwrap_or(0);
+        Ok(crate::StoreStats {
+            total_engrams: total,
+            working_memory_count: 0,
+            semantic_memory_count: 0,
+            superseded_count: 0,
+            avg_confidence: 0.0,
+        })
     }
 }

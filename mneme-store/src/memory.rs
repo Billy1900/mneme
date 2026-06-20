@@ -144,6 +144,12 @@ impl EnvelopeIndex for InMemoryEnvelopeIndex {
         Ok(before - store.len())
     }
 
+    async fn delete(&self, id: Uuid) -> Result<(), StoreError> {
+        let mut store = self.envelopes.write().unwrap();
+        store.remove(&id).ok_or(StoreError::NotFound(id))?;
+        Ok(())
+    }
+
     async fn touch(&self, id: Uuid, new_confidence: f32) -> Result<(), StoreError> {
         let mut store = self.envelopes.write().unwrap();
         let env = store.get_mut(&id).ok_or(StoreError::NotFound(id))?;
@@ -151,6 +157,19 @@ impl EnvelopeIndex for InMemoryEnvelopeIndex {
         env.last_accessed_at = Utc::now();
         env.confidence = new_confidence;
         Ok(())
+    }
+
+    async fn apply_decay(&self, lambda: f64) -> Result<usize, StoreError> {
+        let mut store = self.envelopes.write().unwrap();
+        let mut updated = 0;
+        for env in store.values_mut() {
+            if env.is_active() {
+                let new_conf = (env.confidence as f64 * env.time_decay(lambda)) as f32;
+                env.confidence = new_conf.max(0.0);
+                updated += 1;
+            }
+        }
+        Ok(updated)
     }
 
     async fn stats(&self) -> Result<StoreStats, StoreError> {

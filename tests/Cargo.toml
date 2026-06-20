@@ -6,7 +6,7 @@ publish = false
 
 [dev-dependencies]
 mneme-core = { path = "../mneme-core" }
-mneme-store = { path = "../mneme-store" }
+mneme-store = { path = "../mneme-store", features = ["sqlite"] }
 mneme-embed = { path = "../mneme-embed" }
 mneme-consolidate = { path = "../mneme-consolidate" }
 mneme-api = { path = "../mneme-api" }

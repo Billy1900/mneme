@@ -60,7 +60,9 @@ pub trait EnvelopeIndex: Send + Sync {
     async fn list_working_memory(&self, session_id: &str) -> Result<Vec<Envelope>, StoreError>;
     async fn mark_superseded(&self, id: Uuid, successor: Uuid) -> Result<(), StoreError>;
     async fn gc(&self, confidence_floor: f32, older_than_hours: u64) -> Result<usize, StoreError>;
+    async fn delete(&self, id: Uuid) -> Result<(), StoreError>;
     async fn touch(&self, id: Uuid, new_confidence: f32) -> Result<(), StoreError>;
+    async fn apply_decay(&self, lambda: f64) -> Result<usize, StoreError>;
     async fn stats(&self) -> Result<StoreStats, StoreError>;
 }
 

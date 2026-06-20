@@ -18,7 +18,18 @@ mneme-store = { path = "../mneme-store" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { workspace = true }
+
+[dev-dependencies]
+http-body-util = "0.1"
+mneme-api = { path = "../mneme-api" }
+mneme-consolidate = { path = "../mneme-consolidate" }
+mneme-core = { path = "../mneme-core" }
+mneme-embed = { path = "../mneme-embed" }
+mneme-store = { path = "../mneme-store" }
+reqwest = { version = "0.12", features = ["json"] }
+tower = { version = "0.4", features = ["util"] }
