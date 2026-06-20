@@ -23,6 +23,13 @@ pub trait ConsolidationLLM: Send + Sync {
     async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError>;
 }
 
+#[async_trait]
+impl ConsolidationLLM for Box<dyn ConsolidationLLM> {
+    async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
+        (**self).complete(prompt).await
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ConsolidateError {
     #[error("store error: {0}")]
@@ -171,11 +178,7 @@ where
             let id = Uuid::new_v4();
             let now = Utc::now();
             let full_text = texts[0].to_string();
-            let summary = if full_text.len() > 100 {
-                format!("{}...", &full_text[..97])
-            } else {
-                full_text.clone()
-            };
+            let summary = full_text.clone();
             return Ok(Engram {
                 envelope: Envelope {
                     id,
@@ -268,7 +271,8 @@ Respond in JSON:
                 superseded_by: None,
                 summary: parsed["summary"]
                     .as_str()
-                    .unwrap_or(&full_text[..full_text.len().min(100)])
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&full_text)
                     .to_string(),
                 tags: parsed["tags"]
                     .as_array()
@@ -482,23 +486,21 @@ Respond in JSON:
             .join("\n");
 
         let prompt = format!(
-            r#"You are a memory evolution engine. An existing semantic memory is being
-updated with new evidence from working memory.
+            r#"You are a memory consolidation engine. Merge the existing memory with new evidence into one updated memory.
 
-<existing_memory>
-  <summary>{}</summary>
-  <full_text>{}</full_text>
-</existing_memory>
+Existing memory:
+{existing_full}
 
-<new_evidence>
+New evidence to integrate:
 {entries_block}
-</new_evidence>
 
-Synthesize a single updated memory that integrates both.
+Output a JSON object with exactly these keys:
+- "full_text": the complete merged memory (preserve all specific facts, names, dates)
+- "summary": one sentence, max 30 words
+- "confidence": float 0.0-1.0
 
-Respond in JSON:
-{{"full_text": "...", "summary": "max 30 words", "confidence": 0.0-1.0}}"#,
-            existing.summary, existing_content.full_text,
+JSON:"#,
+            existing_full = existing_content.full_text,
         );
 
         let response = self
@@ -506,13 +508,21 @@ Respond in JSON:
             .complete(&prompt)
             .await
             .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
-        let parsed: serde_json::Value = serde_json::from_str(&response)
-            .map_err(|e| ConsolidateError::Parse(e.to_string()))?;
+
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap_or_else(|_| {
+            serde_json::Value::Null
+        });
 
         let full_text = parsed["full_text"]
             .as_str()
-            .unwrap_or("evolution failed")
-            .to_string();
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .unwrap_or_else(|| {
+                // fallback: concatenate existing + new evidence
+                let mut parts = vec![existing_content.full_text.as_str()];
+                parts.extend_from_slice(new_texts);
+                parts.join(" | ")
+            });
         let embedding = self.embed_model.embed(&full_text).await?;
         let id = Uuid::new_v4();
         let now = Utc::now();
@@ -535,7 +545,8 @@ Respond in JSON:
                 superseded_by: None,
                 summary: parsed["summary"]
                     .as_str()
-                    .unwrap_or(&full_text[..full_text.len().min(100)])
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(&full_text)
                     .to_string(),
                 tags: existing.tags.clone(),
                 content_hash: seahash_str(&full_text),

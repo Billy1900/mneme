@@ -5,7 +5,7 @@ mod runner;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, ValueEnum};
-use mneme_consolidate::OpenAILLM;
+use mneme_consolidate::{AnthropicLLM, OpenAILLM};
 use mneme_embed::backends::OpenAIEmbeddingModel;
 use std::path::PathBuf;
 use tracing::info;
@@ -59,7 +59,17 @@ async fn main() -> Result<()> {
         .context("OPENAI_API_KEY must be set")?;
 
     let embed = OpenAIEmbeddingModel::new(openai_key.clone());
-    let llm = OpenAILLM::new(openai_key.clone());
+    // Use Claude (via OAuth credentials) for compaction synthesis; fall back to OpenAI if unavailable.
+    let llm: runner::ConsolidationLlm = match AnthropicLLM::from_claude_credentials() {
+        Ok(claude) => {
+            info!("Using Claude (OAuth) for compaction LLM");
+            runner::ConsolidationLlm::Anthropic(claude)
+        }
+        Err(e) => {
+            tracing::warn!("Claude credentials unavailable ({e}), falling back to OpenAI LLM");
+            runner::ConsolidationLlm::OpenAI(OpenAILLM::new(openai_key.clone()))
+        }
+    };
     let judge = judge::LLMJudge::new(openai_key.clone());
 
     if let Some(parent) = args.out.parent() {

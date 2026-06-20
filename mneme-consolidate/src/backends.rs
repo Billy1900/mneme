@@ -23,25 +23,47 @@ fn extract_json(text: &str) -> &str {
 #[derive(Clone)]
 pub struct AnthropicLLM {
     api_key: String,
+    /// True if api_key is an OAuth Bearer token (sk-ant-oat01-…),
+    /// false if it's a plain API key (sk-ant-api03-…).
+    use_bearer: bool,
     model: String,
     client: reqwest::Client,
 }
 
 impl AnthropicLLM {
     pub fn new(api_key: String) -> Self {
+        let use_bearer = api_key.starts_with("sk-ant-oat");
         Self {
             api_key,
-            model: "claude-sonnet-4-20250514".to_string(),
+            use_bearer,
+            model: "claude-haiku-4-5-20251001".to_string(),
             client: reqwest::Client::new(),
         }
     }
 
     pub fn with_model(api_key: String, model: &str) -> Self {
+        let use_bearer = api_key.starts_with("sk-ant-oat");
         Self {
             api_key,
+            use_bearer,
             model: model.to_string(),
             client: reqwest::Client::new(),
         }
+    }
+
+    /// Load credentials from ~/.claude/.credentials.json (Claude Code OAuth).
+    pub fn from_claude_credentials() -> Result<Self, String> {
+        let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+        let path = format!("{}/.claude/.credentials.json", home);
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| format!("read {path}: {e}"))?;
+        let val: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("parse credentials: {e}"))?;
+        let token = val["claudeAiOauth"]["accessToken"]
+            .as_str()
+            .ok_or("no accessToken")?
+            .to_string();
+        Ok(Self::new(token))
     }
 }
 
@@ -50,16 +72,23 @@ impl ConsolidationLLM for AnthropicLLM {
     async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
         let body = serde_json::json!({
             "model": self.model,
-            "max_tokens": 1024,
+            "max_tokens": 512,
             "messages": [{"role": "user", "content": prompt}],
         });
 
-        let response = self
+        let mut req = self
             .client
             .post("https://api.anthropic.com/v1/messages")
-            .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
+            .header("content-type", "application/json");
+
+        req = if self.use_bearer {
+            req.header("Authorization", format!("Bearer {}", self.api_key))
+        } else {
+            req.header("x-api-key", &self.api_key)
+        };
+
+        let response = req
             .json(&body)
             .send()
             .await
@@ -128,8 +157,9 @@ impl ConsolidationLLM for OpenAILLM {
     async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
         let body = serde_json::json!({
             "model": self.model,
-            "max_tokens": 1024,
+            "max_tokens": 512,
             "messages": [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"},
         });
 
         let response = self

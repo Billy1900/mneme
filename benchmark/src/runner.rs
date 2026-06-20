@@ -1,7 +1,7 @@
 use anyhow::Result;
 use mneme_api::{MnemeMemory, MnemeSummary};
-use mneme_consolidate::{ConsolidationEngine, OpenAILLM};
-use mneme_core::{MemoryQuery, MemoryType, MnemeConfig};
+use mneme_consolidate::{AnthropicLLM, ConsolidationEngine, ConsolidationLLM, OpenAILLM};
+use mneme_core::{MemoryQuery, MnemeConfig};
 use mneme_embed::{backends::OpenAIEmbeddingModel, EmbeddingModel};
 use mneme_store::{EnvelopeIndex, InMemoryContentStore, InMemoryEnvelopeIndex, MnemeStore};
 use std::sync::Arc;
@@ -12,11 +12,40 @@ use crate::datasets::{LoCoMoConversation, LongMemEvalItem};
 use crate::judge::LLMJudge;
 use crate::metrics::{self, QuestionResult};
 
+/// Re-rank candidates by relevance to the question, return top `keep`.
+async fn rerank(
+    judge: &LLMJudge,
+    question: &str,
+    candidates: Vec<MnemeSummary>,
+    keep: usize,
+) -> Vec<MnemeSummary> {
+    if candidates.len() <= keep {
+        return candidates;
+    }
+    let texts: Vec<&str> = candidates.iter().map(|s| s.full_text.as_str()).collect();
+    match judge.rerank_indices(question, &texts, keep).await {
+        Ok(indices) => indices.into_iter().map(|i| candidates[i].clone()).collect(),
+        Err(e) => {
+            warn!("rerank failed: {e}, using top-{keep} by score");
+            candidates.into_iter().take(keep).collect()
+        }
+    }
+}
+
+/// Which LLM backend to use for compaction synthesis.
+#[derive(Clone)]
+pub enum ConsolidationLlm {
+    Anthropic(AnthropicLLM),
+    OpenAI(OpenAILLM),
+}
+
+// Blanket so we can pass ConsolidationLlm anywhere ConsolidationLLM is needed via dispatch.
+// We use dynamic dispatch inside Session to avoid two generic instantiations.
 type BenchMemory = MnemeMemory<
     InMemoryEnvelopeIndex,
     InMemoryContentStore,
     OpenAIEmbeddingModel,
-    OpenAILLM,
+    Box<dyn ConsolidationLLM>,
 >;
 
 struct Session {
@@ -24,19 +53,21 @@ struct Session {
     envelopes: Arc<InMemoryEnvelopeIndex>,
 }
 
-fn new_session(embed: OpenAIEmbeddingModel, llm: OpenAILLM, config: MnemeConfig) -> Session {
+fn new_session(embed: OpenAIEmbeddingModel, llm: ConsolidationLlm, config: MnemeConfig) -> Session {
     let envelopes = Arc::new(InMemoryEnvelopeIndex::new());
     let content = Arc::new(InMemoryContentStore::new());
 
     let engine_store = MnemeStore::new((*envelopes).clone(), (*content).clone());
     let api_store = MnemeStore::new((*envelopes).clone(), (*content).clone());
-    let engine = ConsolidationEngine::new(engine_store, embed.clone(), llm, config.clone());
+
+    let boxed: Box<dyn ConsolidationLLM> = match llm {
+        ConsolidationLlm::Anthropic(a) => Box::new(a),
+        ConsolidationLlm::OpenAI(o) => Box::new(o),
+    };
+    let engine = ConsolidationEngine::new(engine_store, embed.clone(), boxed, config.clone());
     let memory = MnemeMemory::new(api_store, engine, embed, config);
 
-    Session {
-        memory,
-        envelopes,
-    }
+    Session { memory, envelopes }
 }
 
 /// Recall with fallback: if semantic memory is empty (compaction failed), fall
@@ -79,6 +110,7 @@ async fn recall_with_fallback(
             .into_iter()
             .map(|r| MnemeSummary {
                 id: r.envelope.id,
+                full_text: r.envelope.summary.clone(),
                 summary: r.envelope.summary,
                 confidence: r.envelope.confidence,
                 tags: r.envelope.tags,
@@ -98,7 +130,7 @@ async fn recall_with_fallback(
 pub async fn run_locomo(
     conversations: &[LoCoMoConversation],
     embed: OpenAIEmbeddingModel,
-    llm: OpenAILLM,
+    llm: ConsolidationLlm,
     judge: &LLMJudge,
     top_k: usize,
     use_judge: bool,
@@ -141,13 +173,15 @@ pub async fn run_locomo(
         // Evaluate questions
         for q in &conv.questions {
             let t0 = Instant::now();
-            let summaries = recall_with_fallback(&session, &embed, &q.question, top_k).await;
+            // Fetch 15 candidates, rerank to top_k
+            let candidates = recall_with_fallback(&session, &embed, &q.question, 15).await;
+            let summaries = rerank(judge, &q.question, candidates, top_k).await;
             let latency_ms = t0.elapsed().as_millis() as u64;
 
             let memory_context: String = summaries
                 .iter()
                 .enumerate()
-                .map(|(i, s)| format!("[{}] {}", i + 1, s.summary))
+                .map(|(i, s)| format!("[{}] {}", i + 1, s.full_text))
                 .collect::<Vec<_>>()
                 .join("\n");
 
@@ -202,7 +236,7 @@ pub async fn run_locomo(
 pub async fn run_longmemeval(
     items: &[LongMemEvalItem],
     embed: OpenAIEmbeddingModel,
-    llm: OpenAILLM,
+    llm: ConsolidationLlm,
     judge: &LLMJudge,
     top_k: usize,
     use_judge: bool,
@@ -240,13 +274,14 @@ pub async fn run_longmemeval(
         }
 
         let t0 = Instant::now();
-        let summaries = recall_with_fallback(&session, &embed, &item.question, top_k).await;
+        let candidates = recall_with_fallback(&session, &embed, &item.question, 15).await;
+        let summaries = rerank(judge, &item.question, candidates, top_k).await;
         let latency_ms = t0.elapsed().as_millis() as u64;
 
         let memory_context: String = summaries
             .iter()
             .enumerate()
-            .map(|(i, s)| format!("[{}] {}", i + 1, s.summary))
+            .map(|(i, s)| format!("[{}] {}", i + 1, s.full_text))
             .collect::<Vec<_>>()
             .join("\n");
 

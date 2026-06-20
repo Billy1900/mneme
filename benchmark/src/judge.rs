@@ -83,6 +83,70 @@ Respond ONLY with JSON: {{"score": 0.0|0.5|1.0, "reason": "one sentence"}}"#
         Ok(score.clamp(0.0, 1.0))
     }
 
+    /// Return indices (0-based) of the `keep` most relevant candidates for the question.
+    pub async fn rerank_indices(&self, question: &str, candidates: &[&str], keep: usize) -> Result<Vec<usize>> {
+        let numbered: String = candidates
+            .iter()
+            .enumerate()
+            .map(|(i, t)| format!("[{}] {}", i + 1, t))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let prompt = format!(
+            "Question: {question}\n\nMemory candidates:\n{numbered}\n\n\
+            Return a JSON array of the {keep} most relevant candidate numbers (1-indexed), \
+            most relevant first. Output ONLY the JSON array, e.g. [3,1,5].",
+            keep = keep,
+        );
+
+        let body = serde_json::json!({
+            "model": self.model,
+            "max_tokens": 64,
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"},
+        });
+
+        let resp = self
+            .client
+            .post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        let data: serde_json::Value = resp.json().await?;
+        let content = data["choices"]
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|c| c["message"]["content"].as_str())
+            .unwrap_or("{}");
+
+        // response_format json_object wraps array as {"result":[...]} or similar
+        let parsed: serde_json::Value = serde_json::from_str(content).unwrap_or(serde_json::Value::Null);
+        // try common wrapper keys, or parse content directly as array
+        let arr = parsed.as_array()
+            .or_else(|| parsed["result"].as_array())
+            .or_else(|| parsed["indices"].as_array())
+            .or_else(|| parsed["rankings"].as_array());
+
+        if let Some(arr) = arr {
+            let indices: Vec<usize> = arr
+                .iter()
+                .filter_map(|v| v.as_u64())
+                .filter(|&i| i >= 1 && i <= candidates.len() as u64)
+                .take(keep)
+                .map(|i| (i - 1) as usize)
+                .collect();
+            if !indices.is_empty() {
+                return Ok(indices);
+            }
+        }
+
+        // fallback: identity order
+        Ok((0..keep.min(candidates.len())).collect())
+    }
+
     /// Generate an answer from retrieved memory context.
     pub async fn generate_answer(&self, question: &str, memory_context: &str) -> Result<String> {
         let prompt = format!(

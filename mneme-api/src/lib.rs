@@ -24,6 +24,7 @@ use uuid::Uuid;
 pub struct MnemeSummary {
     pub id: Uuid,
     pub summary: String,
+    pub full_text: String,
     pub confidence: f32,
     pub tags: Vec<String>,
     pub similarity: f32,
@@ -177,13 +178,14 @@ where
         // FIX #16: read actual version from content store for each summary
         let mut summaries = Vec::with_capacity(results.len());
         for r in &results {
-            let version = match self.store.content.get(r.envelope.id).await {
-                Ok(body) => body.version,
-                Err(_) => 1, // graceful degradation if content is missing
+            let (version, full_text) = match self.store.content.get(r.envelope.id).await {
+                Ok(body) => (body.version, body.full_text),
+                Err(_) => (1, r.envelope.summary.clone()),
             };
             summaries.push(MnemeSummary {
                 id: r.envelope.id,
                 summary: r.envelope.summary.clone(),
+                full_text,
                 confidence: r.envelope.confidence,
                 tags: r.envelope.tags.clone(),
                 similarity: r.similarity,
