@@ -70,6 +70,7 @@ impl EmbeddingModel for MockEmbeddingModel {
 // OpenAI embedding model
 // ─────────────────────────────────────────────────────────────
 
+#[derive(Clone)]
 pub struct OpenAIEmbeddingModel {
     api_key: String,
     model: String,

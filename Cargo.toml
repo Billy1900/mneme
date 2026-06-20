@@ -8,6 +8,7 @@ members = [
     "mneme-api",         # Public API surface (the interface agents use)
     "mneme-server",      # HTTP server for multi-agent access
     "tests",             # Integration tests for the full system
+    "benchmark",         # Benchmark harness (LoCoMo + LongMemEval)
 ]
 
 [workspace.dependencies]

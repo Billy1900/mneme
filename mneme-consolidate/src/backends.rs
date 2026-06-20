@@ -4,10 +4,23 @@ use async_trait::async_trait;
 
 use crate::{ConsolidateError, ConsolidationLLM};
 
+/// Extract the first valid JSON object from a response string.
+/// More robust than stripping markdown fences character-by-character.
+fn extract_json(text: &str) -> &str {
+    let s = text.trim();
+    if let (Some(start), Some(end)) = (s.find('{'), s.rfind('}')) {
+        if start <= end {
+            return &s[start..=end];
+        }
+    }
+    s
+}
+
 // ─────────────────────────────────────────────────────────────
 // Anthropic LLM (production)
 // ─────────────────────────────────────────────────────────────
 
+#[derive(Clone)]
 pub struct AnthropicLLM {
     api_key: String,
     model: String,
@@ -75,7 +88,83 @@ impl ConsolidationLLM for AnthropicLLM {
             .and_then(|block| block["text"].as_str())
             .ok_or_else(|| ConsolidateError::LLM("no text in response".into()))?;
 
-        // Strip any markdown code fences
+        let cleaned = extract_json(text).to_string();
+
+        Ok(cleaned)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// OpenAI LLM (gpt-4o-mini, for benchmarks without Anthropic key)
+// ─────────────────────────────────────────────────────────────
+
+#[derive(Clone)]
+pub struct OpenAILLM {
+    api_key: String,
+    model: String,
+    client: reqwest::Client,
+}
+
+impl OpenAILLM {
+    pub fn new(api_key: String) -> Self {
+        Self {
+            api_key,
+            model: "gpt-4o-mini".to_string(),
+            client: reqwest::Client::new(),
+        }
+    }
+
+    pub fn with_model(api_key: String, model: &str) -> Self {
+        Self {
+            api_key,
+            model: model.to_string(),
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+#[async_trait]
+impl ConsolidationLLM for OpenAILLM {
+    async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
+        let body = serde_json::json!({
+            "model": self.model,
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": prompt}],
+        });
+
+        let response = self
+            .client
+            .post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "unknown error".to_string());
+            return Err(ConsolidateError::LLM(format!(
+                "OpenAI API error {}: {}",
+                status, body
+            )));
+        }
+
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
+
+        let text = data["choices"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|c| c["message"]["content"].as_str())
+            .ok_or_else(|| ConsolidateError::LLM("no content in response".into()))?;
+
         let cleaned = text
             .trim()
             .strip_prefix("```json")

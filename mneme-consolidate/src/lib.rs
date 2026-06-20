@@ -16,7 +16,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 pub mod backends;
-pub use backends::{AnthropicLLM, MockLLM};
+pub use backends::{AnthropicLLM, MockLLM, OpenAILLM};
 
 #[async_trait]
 pub trait ConsolidationLLM: Send + Sync {
@@ -116,17 +116,31 @@ where
             if let Some(best) = existing.first() {
                 if best.similarity > 0.80 {
                     info!(existing_id = %best.envelope.id, sim = best.similarity, "Merging into existing");
-                    let evolved = self
+                    match self
                         .evolve_with_new_evidence(&best.envelope, &cluster_texts, &cluster_ids)
-                        .await?;
-                    new_engrams.push(evolved);
-                    continue;
+                        .await
+                    {
+                        Ok(evolved) => {
+                            new_engrams.push(evolved);
+                            continue;
+                        }
+                        Err(e) => {
+                            warn!("evolve_with_new_evidence failed, synthesizing fresh: {e}");
+                        }
+                    }
                 }
             }
 
-            let engram = self
+            let engram = match self
                 .synthesize_cluster(&cluster_texts, &cluster_ids, &centroid, session_id)
-                .await?;
+                .await
+            {
+                Ok(e) => e,
+                Err(e) => {
+                    warn!("synthesize_cluster failed, skipping cluster: {e}");
+                    continue;
+                }
+            };
             new_engrams.push(engram);
         }
 
@@ -180,15 +194,19 @@ Respond in JSON:
             .complete(&prompt)
             .await
             .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
-        let parsed: serde_json::Value = serde_json::from_str(&response)
-            .map_err(|e| ConsolidateError::Parse(e.to_string()))?;
+
+        // Parse with fallback: if LLM returns unparseable content, use the raw texts
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap_or_else(|e| {
+            warn!("synthesize_cluster: LLM response not valid JSON ({e}), using raw text fallback");
+            serde_json::Value::Null
+        });
 
         let id = Uuid::new_v4();
         let now = Utc::now();
         let full_text = parsed["full_text"]
             .as_str()
-            .unwrap_or("consolidation failed")
-            .to_string();
+            .map(String::from)
+            .unwrap_or_else(|| texts.join(" | "));
         let embedding = self.embed_model.embed(&full_text).await?;
 
         Ok(Engram {

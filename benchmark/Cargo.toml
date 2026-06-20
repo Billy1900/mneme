@@ -1,0 +1,27 @@
+[package]
+name = "mneme-benchmark"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "mneme-bench"
+path = "src/main.rs"
+
+[dependencies]
+mneme-api        = { path = "../mneme-api" }
+mneme-core       = { path = "../mneme-core" }
+mneme-store      = { path = "../mneme-store" }
+mneme-embed      = { path = "../mneme-embed" }
+mneme-consolidate = { path = "../mneme-consolidate" }
+
+tokio      = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+uuid       = { workspace = true }
+chrono     = { workspace = true }
+tracing    = { workspace = true }
+reqwest    = { workspace = true }
+
+clap   = { version = "4", features = ["derive"] }
+anyhow = "1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
