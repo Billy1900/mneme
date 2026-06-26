@@ -4,6 +4,7 @@
     "sessions": [
       {
         "session_id": "conv-26_s1",
+        "session_date": "1:56 pm on 8 May, 2023",
         "turns": [
           "Caroline: Hey Mel! Good to see you! How have you been?",
           "Melanie: Hey Caroline! Good to see you! I'm swamped with the kids & work. What's up with you? Anything new?",
@@ -27,6 +28,7 @@
       },
       {
         "session_id": "conv-26_s2",
+        "session_date": "1:14 pm on 25 May, 2023",
         "turns": [
           "Melanie: Hey Caroline, since we last chatted, I've had a lot of things happening to me. I ran a charity race for mental health last Saturday – it was really rewarding. Really made me think about taking care of our minds.",
           "Caroline: That charity race sounds great, Mel! Making a difference & raising awareness for mental health is super rewarding - I'm really proud of you for taking part!",
@@ -49,6 +51,7 @@
       },
       {
         "session_id": "conv-26_s3",
+        "session_date": "7:55 pm on 9 June, 2023",
         "turns": [
           "Caroline: Hey Melanie! How's it going? I wanted to tell you about my school event last week. It was awesome! I talked about my transgender journey and encouraged students to get involved in the LGBTQ community. It was great to see their reactions. It made me reflect on how far I've come since I started transitioning three years ago.",
           "Melanie: Hey Caroline! Great to hear from you. Sounds like your event was amazing! I'm so proud of you for spreading awareness and getting others involved in the LGBTQ community. You've come a long way since your transition - keep on inspiring people with your strength and courage!",
@@ -77,6 +80,7 @@
       },
       {
         "session_id": "conv-26_s4",
+        "session_date": "10:37 am on 27 June, 2023",
         "turns": [
           "Caroline: Hey Melanie! Long time no talk! A lot's been going on in my life! Take a look at this.",
           "Melanie: Hey, Caroline! Nice to hear from you! Love the necklace, any special meaning to it?",
@@ -100,6 +104,7 @@
       },
       {
         "session_id": "conv-26_s5",
+        "session_date": "1:36 pm on 3 July, 2023",
         "turns": [
           "Caroline: Since we last spoke, some big things have happened. Last week I went to an LGBTQ+ pride parade. Everyone was so happy and it made me feel like I belonged. It showed me how much our community has grown, it was amazing!",
           "Melanie: Wow, Caroline, sounds like the parade was an awesome experience! It's great to see the love and support for the LGBTQ+ community. Congrats! Has this experience influenced your goals at all?",
@@ -121,6 +126,7 @@
       },
       {
         "session_id": "conv-26_s6",
+        "session_date": "8:18 pm on 6 July, 2023",
         "turns": [
           "Caroline: Hey Mel! Long time no talk. Lots has been going on since then!",
           "Melanie: Hey Caroline! Missed you. Anything new? Spill the beans!",
@@ -142,6 +148,7 @@
       },
       {
         "session_id": "conv-26_s7",
+        "session_date": "4:33 pm on 12 July, 2023",
         "turns": [
           "Caroline: Hey Mel, great to chat with you again! So much has happened since we last spoke - I went to an LGBTQ conference two days ago and it was really special. I got the chance to meet and connect with people who've gone through similar journeys. It was such a welcoming environment and I felt totally accepted. I'm really thankful for this amazing community - it's shown me how important it is to fight for trans rights and spread awareness.",
           "Melanie: Wow, Caroline, that sounds awesome! So glad you felt accepted and supported. Events like these are great for reminding us of how strong community can be!",
@@ -174,6 +181,7 @@
       },
       {
         "session_id": "conv-26_s8",
+        "session_date": "1:51 pm on 15 July, 2023",
         "turns": [
           "Caroline: Hey Mel, what's up? Been a busy week since we talked.",
           "Melanie: Hey Caroline, it's been super busy here. So much since we talked! Last Fri I finally took my kids to a pottery workshop. We all made our own pots, it was fun and therapeutic!",
@@ -218,6 +226,7 @@
       },
       {
         "session_id": "conv-26_s9",
+        "session_date": "2:31 pm on 17 July, 2023",
         "turns": [
           "Melanie: Hey Caroline, hope all's good! I had a quiet weekend after we went camping with my fam two weekends ago. It was great to unplug and hang with the kids. What've you been up to? Anything fun over the weekend?",
           "Caroline: Hey Melanie! That sounds great! Last weekend I joined a mentorship program for LGBTQ youth - it's really rewarding to help the community.",
@@ -240,6 +249,7 @@
       },
       {
         "session_id": "conv-26_s10",
+        "session_date": "8:56 pm on 20 July, 2023",
         "turns": [
           "Caroline: Hey Melanie! Just wanted to say hi!",
           "Melanie: Hey Caroline! Good to talk to you again. What's up? Anything new since last time?",
@@ -269,6 +279,7 @@
       },
       {
         "session_id": "conv-26_s11",
+        "session_date": "2:24 pm on 14 August, 2023",
         "turns": [
           "Melanie: Hey Caroline! Last night was amazing! We celebrated my daughter's birthday with a concert surrounded by music, joy and the warm summer breeze. Seeing my kids' smiles was so awesome, and I'm so thankful for our special moments together.",
           "Caroline: Wow, sounds wonderful! Your love for your kids is so awesome. What concert was it? The advocacy event was a cool experience - so much love and support, amazing!",
@@ -291,6 +302,7 @@
       },
       {
         "session_id": "conv-26_s12",
+        "session_date": "1:50 pm on 17 August, 2023",
         "turns": [
           "Caroline: Hey Mel! How're ya doin'? Recently, I had a not-so-great experience on a hike. I ran into a group of religious conservatives who said something that really upset me. It made me think how much work we still have to do for LGBTQ rights. It's been so helpful to have people around me who accept and support me, so I know I'll be ok!",
           "Melanie: Hey Caroline, sorry about the hike. It sucks when people are so closed-minded. Strong support really helps. FYI, I finished another pottery project - want to see a pic?",
@@ -317,6 +329,7 @@
       },
       {
         "session_id": "conv-26_s13",
+        "session_date": "3:31 pm on 23 August, 2023",
         "turns": [
           "Caroline: Hi Melanie! Hope you're doing good. Guess what I did this week? I took the first step towards becoming a mom - I applied to adoption agencies! It's a big decision, but I think I'm ready to give all my love to a child. I got lots of help from this adoption advice/assistance group I attended. It was great!",
           "Melanie: Caroline, congrats! So proud of you for taking this step. How does it feel? Also, do you have any pets?",
@@ -340,6 +353,7 @@
       },
       {
         "session_id": "conv-26_s14",
+        "session_date": "1:33 pm on 25 August, 2023",
         "turns": [
           "Caroline: Hey, Mel! How's it going? There's something I want to tell you. I went hiking last week and got into a bad spot with some people. It really bugged me, so I tried to apologize to them.",
           "Melanie: Wow, Caroline! Sorry that happened to you. It's tough when those things happen, but it's great you apologized. Takes a lot of courage and maturity! What do you think of this?",
@@ -380,6 +394,7 @@
       },
       {
         "session_id": "conv-26_s15",
+        "session_date": "3:19 pm on 28 August, 2023",
         "turns": [
           "Caroline: Hey Melanie, great to hear from you. What's been up since we talked?",
           "Melanie: Hey Caroline! Since we last spoke, I took my kids to a park yesterday. They had fun exploring and playing. It was nice seeing them have a good time outdoors. Time flies, huh? What's new with you?",
@@ -413,6 +428,7 @@
       },
       {
         "session_id": "conv-26_s16",
+        "session_date": "12:09 am on 13 September, 2023",
         "turns": [
           "Caroline: Hey Mel, long time no chat! I had a wicked day out with the gang last weekend - we went biking and saw some pretty cool stuff. It was so refreshing, and the pic I'm sending is just stunning, eh?",
           "Melanie: Hey Caroline! It's so good to hear from you! That pic is so beautiful, the colors really pop. Biking sounds like a great way to get out in nature. We went camping with the kids a few weeks ago, had a blast exploring the forest and hiking. Nature can be so refreshing for your soul. Any plans coming up?",
@@ -438,6 +454,7 @@
       },
       {
         "session_id": "conv-26_s17",
+        "session_date": "10:31 am on 13 October, 2023",
         "turns": [
           "Caroline: Hey Mel, what's up? Long time no see! I just contacted my mentor for adoption advice. I'm ready to be a mom and share my love and family. It's a great feeling. Anything new with you? Anything exciting going on?",
           "Melanie: Hey Caroline! Great to hear from you! Wow, what an amazing journey. Congrats!",
@@ -469,6 +486,7 @@
       },
       {
         "session_id": "conv-26_s18",
+        "session_date": "6:55 pm on 20 October, 2023",
         "turns": [
           "Melanie: Hey Caroline, that roadtrip this past weekend was insane! We were all freaked when my son got into an accident. We were so lucky he was okay. It was a real scary experience. Thankfully it's over now. What's been up since we last talked?",
           "Caroline: Oops, sorry 'bout the accident! Must have been traumatizing for you guys. Thank goodness your son's okay. Life sure can be a roller coaster.",
@@ -498,6 +516,7 @@
       },
       {
         "session_id": "conv-26_s19",
+        "session_date": "9:55 am on 22 October, 2023",
         "turns": [
           "Caroline: Woohoo Melanie! I passed the adoption agency interviews last Friday! I'm so excited and thankful. This is a big move towards my goal of having a family.",
           "Melanie: Congrats, Caroline! Adoption sounds awesome. I'm so happy for you. These figurines I bought yesterday remind me of family love. Tell me, what's your vision for the future?",
@@ -1449,6 +1468,7 @@
     "sessions": [
       {
         "session_id": "conv-30_s1",
+        "session_date": "4:04 pm on 20 January, 2023",
         "turns": [
           "Gina: Hey Jon! Good to see you. What's up? Anything new?",
           "Jon: Hey Gina! Good to see you too. Lost my job as a banker yesterday, so I'm gonna take a shot at starting my own business.",
@@ -1482,6 +1502,7 @@
       },
       {
         "session_id": "conv-30_s2",
+        "session_date": "2:32 pm on 29 January, 2023",
         "turns": [
           "Gina: Hey Jon! Long time no see! Things have been hectic lately. I just launched an ad campaign for my clothing store in hopes of growing the business. Starting my own store and taking risks is both scary and rewarding. I'm excited to see where it takes me!",
           "Jon: Hey Gina! Whoa, your store looks great! All your hard work really paid off - congrats! Must be awesome to see your stuff on display.",
@@ -1503,6 +1524,7 @@
       },
       {
         "session_id": "conv-30_s3",
+        "session_date": "12:48 am on 1 February, 2023",
         "turns": [
           "Jon: Hey Gina, hope you're doing ok! Still following my passion for dance. It's been bumpy, but I'm determined to make it work. I'm still searching for a place to open my dance studio.",
           "Gina: Hi Jon! So happy you're pushing forward with dancing! Inspiring 💪 I emailed some wholesalers and one replied and said yes today! I'm over the moon because now I can expand my clothing store and get closer to my customers. Check it out - here's a pic!",
@@ -1522,6 +1544,7 @@
       },
       {
         "session_id": "conv-30_s4",
+        "session_date": "10:43 am on 4 February, 2023",
         "turns": [
           "Jon: Hey Gina! What's up? How's the store going? I gotta tell you about this thing with my biz.",
           "Gina: Hey Jon! The store's doing great! It's a wild ride. How's the biz?",
@@ -1546,6 +1569,7 @@
       },
       {
         "session_id": "conv-30_s5",
+        "session_date": "9:32 am on 8 February, 2023",
         "turns": [
           "Gina: Hey Jon! Great hearing from you again. How have you been? BTW, I found a cool new fashion piece for my store. Can't wait to share with my customers.",
           "Jon: Hey Gina! Congrats on the new fashion piece! Looks like your store is growing. Remenber the festival I told you about? Had that performance and it was awesome - so many people there complementing my dance moves. Dancing brings me joy and it was nice to be reminded why I'm passionate about it.",
@@ -1574,6 +1598,7 @@
       },
       {
         "session_id": "conv-30_s6",
+        "session_date": "2:35 pm on 16 March, 2023",
         "turns": [
           "Jon: Hi Gina! Been hectic for me lately. Started hitting the gym last week to stay on track with the venture. Gotta figure out how to balance it all, but it's going well. How about you?",
           "Gina: Hey Jon! Great to hear from you. Been having some tough times lately.",
@@ -1598,6 +1623,7 @@
       },
       {
         "session_id": "conv-30_s7",
+        "session_date": "7:28 pm on 23 March, 2023",
         "turns": [
           "Jon: Hey Gina, how's it going?",
           "Gina: Hey Jon, my online clothing store has been a roller coaster but rewarding. Starting a business takes courage - you hang in there too!",
@@ -1620,6 +1646,7 @@
       },
       {
         "session_id": "conv-30_s8",
+        "session_date": "1:26 pm on 3 April, 2023",
         "turns": [
           "Jon: Hey Gina, I had to shut down my bank account. It was tough, but I needed to do it for my biz.",
           "Gina: Oh no, Jon! Sorry to hear that. Tough decision for you? How're you handling the changes?",
@@ -1651,6 +1678,7 @@
       },
       {
         "session_id": "conv-30_s9",
+        "session_date": "10:33 am on 9 April, 2023",
         "turns": [
           "Jon: Hey Gina! I'm turning my loves of dance into a business. I'm sunk tons of time into the studio lately, and look at my students - they're already killing it. I'm even learning with them!",
           "Gina: Hey Jon! Wow, way to take your passion and make it into a biz! The dance studio looks awesome.",
@@ -1670,6 +1698,7 @@
       },
       {
         "session_id": "conv-30_s10",
+        "session_date": "11:24 am on 25 April, 2023",
         "turns": [
           "Jon: Hi Gina! I just wanted to fill you in on my business. Yesterday, I went to a fair to show off my studio, it was both stressful and great! I got some possible leads, so that was awesome. But overall, I've learned that this biz is no cakewalk and having confidence in yourself is important for making it successful!",
           "Gina: Hey Jon, congrats on the fair! It's awesome to see your hard work paying off. Keep on pushing, pal, you're headed for greatness. Oh, and BTW, I started my own online clothing store not so long ago - pretty cool, huh?",
@@ -1689,6 +1718,7 @@
       },
       {
         "session_id": "conv-30_s11",
+        "session_date": "3:14 pm on 11 May, 2023",
         "turns": [
           "Jon: Hi! Since we last spoke I am still working on the dance studio and things are looking up!",
           "Gina: Hi! You're so inspiring taking it on and opening your own studio!",
@@ -1716,6 +1746,7 @@
       },
       {
         "session_id": "conv-30_s12",
+        "session_date": "7:18 pm on 27 May, 2023",
         "turns": [
           "Gina: Hey Jon! Long time no talk! A lot's happened - I just got accepted for a fashion internship!",
           "Jon: Congrats, Gina! That's awesome news about the fashion internship. 🎉 So stoked for you. Where is the internship and how're you feelin' about it?",
@@ -1740,6 +1771,7 @@
       },
       {
         "session_id": "conv-30_s13",
+        "session_date": "8:29 pm on 13 June, 2023",
         "turns": [
           "Jon: Hey Gina, thanks for being there for me and believing in me. It means a lot.",
           "Gina: Sure, Jon! I'm always around for you. How've you been since we caught up?",
@@ -1768,6 +1800,7 @@
       },
       {
         "session_id": "conv-30_s14",
+        "session_date": "9:38 pm on 16 June, 2023",
         "turns": [
           "Jon: Gina, you won't believe it - I got mentored by this amazing business dude yesterday! It was really inspiring and now I'm even more pumped to chase my dreams. What's been up with you lately?",
           "Gina: Wow, Jon! Mentors can really help. I'm working on my online store, growing the customer base. It's tough but I'm determined. How about you? Any new things happening?",
@@ -1793,6 +1826,7 @@
       },
       {
         "session_id": "conv-30_s15",
+        "session_date": "10:04 am on 19 June, 2023",
         "turns": [
           "Jon: Hey Gina, hope you're doing great! Still working on my biz. Took a short trip last week to Rome to clear my mind a little.",
           "Gina: Hi! Good for you! It definitely will help you to concentrate on your biz better.",
@@ -1820,6 +1854,7 @@
       },
       {
         "session_id": "conv-30_s16",
+        "session_date": "2:15 pm on 21 June, 2023",
         "turns": [
           "Gina: Hey Jon, what's been up? Some pretty cool stuff happened since we talked. I have acquired some new unique pieces for my store.",
           "Jon: Congrats on your store, Gina! Happy for you! It looks sick - is it a unique piece you're selling?",
@@ -1841,6 +1876,7 @@
       },
       {
         "session_id": "conv-30_s17",
+        "session_date": "1:25 pm on 9 July, 2023",
         "turns": [
           "Gina: Hey Jon! Long time no chat! How's the dance studio? Last week was wild, I got noticed by fashion editors and it's been amazing but kinda scary. Everything's exciting but it's a lot of pressure to keep going up!",
           "Jon: Hey Gina! Congrats on the fashion editors reach-out, that's awesome! Dance practice has been fun and exhausting. I'm gonna stay determined and make my own path by going full-time with my biz idea.",
@@ -1867,6 +1903,7 @@
       },
       {
         "session_id": "conv-30_s18",
+        "session_date": "5:44 pm on 21 July, 2023",
         "turns": [
           "Gina: Hey Jon! Long time no talk! Last week, I built a new website for customers to make orders. It's been a wild ride but I'm loving it. What's up with you? How's the dance studio?",
           "Jon: Hey Gina, congrats on the clothing store! The dance studio is on tenuous grounds right now, but I'm staying positive. I got a temp job to help cover expenses while I look for investors. It's tough, but I'm sure it'll be worth it.",
@@ -1894,6 +1931,7 @@
       },
       {
         "session_id": "conv-30_s19",
+        "session_date": "6:46 pm on 23 July, 2023",
         "turns": [
           "Jon: Hey Gina! We haven't talked in a few days. Been rehearsing hard and working on business plans. It's been stressful, but dancing has kept me going.",
           "Gina: Hey Jon! Remember, just do it! You should get to the point where anyone else would quit and you're not going to stop there. No, what are you waiting for? Do it! Just do it!",
@@ -2406,6 +2444,7 @@
     "sessions": [
       {
         "session_id": "conv-41_s1",
+        "session_date": "11:01 am on 17 December, 2022",
         "turns": [
           "Maria: Hey John! Long time no see! What's up?",
           "John: Hey Maria! Good to see you. Just got back from a family road trip yesterday, it was fun! Anything exciting happening for you?",
@@ -2427,6 +2466,7 @@
       },
       {
         "session_id": "conv-41_s2",
+        "session_date": "6:10 pm on 22 December, 2022",
         "turns": [
           "Maria: Hey John, been a few days since we chatted. In the meantime, I donated my old car to a homeless shelter I volunteer at yesterday. How's the campaign going? I'm keen to hearabout it.",
           "John: Hi Maria! It's been an interesting ride so far. I've been networking with some people to get their input.",
@@ -2460,6 +2500,7 @@
       },
       {
         "session_id": "conv-41_s3",
+        "session_date": "8:30 pm on 1 January, 2023",
         "turns": [
           "John: Hey Maria, great to chat again! I joined a service-focused online group last week and it's been an emotional ride. Everyone there is incredible with their own inspiring stories. They've opened my eyes to new perspectives, and I'm feeling a sense of connection and purpose with them.",
           "Maria: Wow, John! That's amazing news. It's great to see you finding such a supportive community that is making a difference.",
@@ -2482,6 +2523,7 @@
       },
       {
         "session_id": "conv-41_s4",
+        "session_date": "7:06 pm on 9 January, 2023",
         "turns": [
           "Maria: Hey John, great news - I'm now friends with one of my fellow volunteers! We both love helping others. How have you been since we last chatted?",
           "John: Hey Maria, I've been busy with work and family, but last week I had an unexpected incident on my way home. It reminded me how life can throw unexpected troubles our way.",
@@ -2513,6 +2555,7 @@
       },
       {
         "session_id": "conv-41_s5",
+        "session_date": "1:17 pm on 28 January, 2023",
         "turns": [
           "John: Hey Maria, since we last spoke I went to that community mtg. It was really interesting hearing everyone's worries and how it affects our area. It made me realize how crucial the upgrades are, especially for the kids. I'm really upset seeing the state of our education. How do you think we can make things better?",
           "Maria: Hey John, cool that you made it. You're right, it's really sad to see the state of education. We should fight for more money and resources for schools and raise awareness about the importance of education. It's not just for our kids, but for all of us too!",
@@ -2534,6 +2577,7 @@
       },
       {
         "session_id": "conv-41_s6",
+        "session_date": "2:33 pm on 5 February, 2023",
         "turns": [
           "Maria: Hey John! Long time no talk. I just wanted to let you know I challenged myself last Friday and did a charity event. It was great! I truly felt the power of our collective effort to help people in need, so heartwarming.",
           "John: Wow, Maria! Truly inspiring! It's so cool to see how our community can make a difference. How did it feel to be part of that event?",
@@ -2561,6 +2605,7 @@
       },
       {
         "session_id": "conv-41_s7",
+        "session_date": "8:55 pm on 25 February, 2023",
         "turns": [
           "Maria: Hey John, how's it going? Just wanted to give you the heads up on what's been happening lately- I took a creative writing class recently, and it was super enlightening!",
           "John: Hey Maria! Wanted to let you know that I'm running for office again. It's been a wild ride, but I'm more excited than ever! How have you been?",
@@ -2583,6 +2628,7 @@
       },
       {
         "session_id": "conv-41_s8",
+        "session_date": "6:03 pm on 6 March, 2023",
         "turns": [
           "Maria: Hey John, I haven't talked to you in a while. Last week, my grandma passed away and it's been really hard. I'm trying to stay positive, but it's tough. How're you doing?",
           "John: So sorry to hear about your loss, Maria. I'm here for you if you need anything. I'm doing well, I just had a picnic with the wife and kids.",
@@ -2614,6 +2660,7 @@
       },
       {
         "session_id": "conv-41_s9",
+        "session_date": "9:36 am on 2 April, 2023",
         "turns": [
           "Maria: Hey John, long time no see! I've been taking a poetry class lately to help me put my feelings into words. It's been a rough ride, but it's been good. How have you been?",
           "John: Hey Maria! Awesome to hear from you. Sounds like a great way to delve into your feelings. Since we spoke last, I've had quite the adventure!\n",
@@ -2637,6 +2684,7 @@
       },
       {
         "session_id": "conv-41_s10",
+        "session_date": "12:24 am on 7 April, 2023",
         "turns": [
           "John: Hey Maria, I'm so excited to tell you I started a weekend yoga class with a colleague - it's awesome! I feel great, both mentally and physically after each session. I'd been wanting to try yoga for a while and finally took the plunge. Simple stretching and breathing is having such a positive effect on my wellbeing. And the instructor is great too.",
           "Maria: Wow, John, glad to hear that! It's amazing how something like stretching and breathing can have such a positive effect on our wellbeing. What can you tell me about your instructor that makes them so great?",
@@ -2660,6 +2708,7 @@
       },
       {
         "session_id": "conv-41_s11",
+        "session_date": "6:13 pm on 10 April, 2023",
         "turns": [
           "John: Hey Maria, haven't talked for a few days. Had a wild week, my car broke down last Fri on my way to work. Trying to get it fixed but it's tough & putting a strain on my wallet. Staying positive & looking for a solution though.",
           "Maria: Aww John, bummer about that. No doubt it's been tough, but I'm impressed by how positive you're being. Keep it up - tough times pass, but you're tough enough to get through 'em!",
@@ -2686,6 +2735,7 @@
       },
       {
         "session_id": "conv-41_s12",
+        "session_date": "7:34 pm on 18 April, 2023",
         "turns": [
           "John: Hey Maria, hope you're doing okay. Since we chatted last, I've been blogging about politics and the government. It's been a really satisfying experience and I care about making a real impact. We need way better education and infrastructure and I know firsthand how this impacts neighborhoods.",
           "Maria: Hey John, glad to hear you're fired up about something! Blogging can really make a difference. I agree that education and infrastructure are key to our community's growth.",
@@ -2714,6 +2764,7 @@
       },
       {
         "session_id": "conv-41_s13",
+        "session_date": "3:18 pm on 4 May, 2023",
         "turns": [
           "John: Hey Maria! Long time no see! Tons has gone down since then!",
           "Maria: Hey John! Nice to hear from you. What's new with you?",
@@ -2756,6 +2807,7 @@
       },
       {
         "session_id": "conv-41_s14",
+        "session_date": "5:04 pm on 6 May, 2023",
         "turns": [
           "John: Hey Maria, great to chat again! A lot has happened since we last spoke. Last week, I decided to run for office again - even though I haven't been successful before. I guess I can't let go of my dream to make a difference in my community. Can you believe it? Feels like a dream come true!",
           "Maria: Way to go, John! You're doing great. I'm so proud of you for sticking with it. You're always dreaming up ways to make a difference and I'm sure your drive will pay off. Don't be afraid to take risks-- I'm 100% behind you!",
@@ -2784,6 +2836,7 @@
       },
       {
         "session_id": "conv-41_s15",
+        "session_date": "7:38 pm on 20 May, 2023",
         "turns": [
           "John: Hey Maria, how's it going? Been real busy tackling a project to support military veterans. Trying to get a petition going, it's pretty rewarding but kinda stressful. How are you?",
           "Maria: Hey John, I'm good. Sorry to hear it's been rough. How did you decide to take on that project?",
@@ -2808,6 +2861,7 @@
       },
       {
         "session_id": "conv-41_s16",
+        "session_date": "1:24 pm on 25 May, 2023",
         "turns": [
           "John: Hey Maria, I've been busy doing the petition I started - it's tricky but it's been cool getting back in touch with my buddies and gaining support. I got this picture of my workmates when we went on a hiking trip, they really make me keep going! What have you been up to? Anything new with your charity?",
           "Maria: Hey John! Cool that it's going well - you and your friends look like a great team! I'm busy at the shelter getting ready for a fundraiser next week. Hopefully, I can raise enough to cover basic needs for the homeless.",
@@ -2832,6 +2886,7 @@
       },
       {
         "session_id": "conv-41_s17",
+        "session_date": "11:51 am on 3 June, 2023",
         "turns": [
           "John: Hey Maria, long time no talk! Life's been pretty wild lately. The toughest thing to deal with is that we had to say goodbye to Max. He was such an important part of our family for 10 years and it's so hard to think he's not here wagging that tail anymore.",
           "Maria: John, I'm sorry to hear about Max. It can be tough to lose a pet - they're like family. How have you been coping?",
@@ -2853,6 +2908,7 @@
       },
       {
         "session_id": "conv-41_s18",
+        "session_date": "2:47 pm on 12 June, 2023",
         "turns": [
           "Maria: Hey John, how're you doing? I'm sorry about Max. Losing a pet is tough. Some friends from church and I went camping last weekend - it was a blast! Just something nice to take my mind off things. Anything fun in your life lately?",
           "John: Hey Maria, thanks for your kind words. It's still tough, but I'm finding some comfort in the good memories. Wow, your camping trip sounds awesome! I went on a mountaineering trip last week with some workmates. It was great and helped clear my head. Anything else cool happening in your life?",
@@ -2881,6 +2937,7 @@
       },
       {
         "session_id": "conv-41_s19",
+        "session_date": "7:20 pm on 16 June, 2023",
         "turns": [
           "Maria: Hey John, been good since we talked? I got some great news to share - I joined a gym last week! It's been super positive - I'm sticking to my workout routine and the people are awesome. The atmosphere is so welcoming.",
           "John: Congrats, Maria! Sounds like it's been a great experience. Having a positive environment and supportive people can really help with motivation, right? So, do you have any fitness goals in mind?",
@@ -2912,6 +2969,7 @@
       },
       {
         "session_id": "conv-41_s20",
+        "session_date": "12:21 am on 27 June, 2023",
         "turns": [
           "Maria: Hey John, long time no talk! A lot has happened since then. I've been struggling, but I'm focusing on the positive and relying on my friends and fam for support.",
           "John: Hey Maria, sorry to hear that. That's rough, but it's great that you're focusing on the positive. Having support from your loved ones can make a big difference. How have they been helping you out?",
@@ -2935,6 +2993,7 @@
       },
       {
         "session_id": "conv-41_s21",
+        "session_date": "8:43 pm on 3 July, 2023",
         "turns": [
           "Maria: Hey John, long time no see! Sorry I didn't get back to you sooner... So much has happened! Check out these kids I met at the shelter!",
           "John: Hey Maria! Good to hear from you. Those little ones are adorable, any updates on them? How have you been?",
@@ -2969,6 +3028,7 @@
       },
       {
         "session_id": "conv-41_s22",
+        "session_date": "6:59 pm on 5 July, 2023",
         "turns": [
           "John: Since the last chat, I've been thinking about how education and infrastructure shape communities. It's so sad how they can stunt growth in neighborhoods, but it also drives me to do what I can to make it better.",
           "Maria: I totally agree. They play a crucial role in shaping communities. It's unfortunate to witness the negative effects when they are lacking, but it's inspiring to see your passion and proactive approach towards making a positive change.",
@@ -2995,6 +3055,7 @@
       },
       {
         "session_id": "conv-41_s23",
+        "session_date": "6:29 pm on 7 July, 2023",
         "turns": [
           "John: Maria, since we talked, it's been tough. My old area was hit by a nasty flood last week. The infrastructure wasn't great so lots of homes were ruined. It's reminding me we need to fix things up in our community.",
           "Maria: Sorry to hear about what happened in your area, John. That must have been tough for you and everyone there. Is there anything I can do to help?",
@@ -3014,6 +3075,7 @@
       },
       {
         "session_id": "conv-41_s24",
+        "session_date": "3:34 pm on 17 July, 2023",
         "turns": [
           "John: Hey Maria, last week was really eye-opening. I visited a veteran's hospital and met some amazing people. It made me appreciate what we have and the need to give back.",
           "Maria: Wow, John! That sounds awesome. It's so important to appreciate and support those who served in the military. Did you learn anything cool during your visit?",
@@ -3036,6 +3098,7 @@
       },
       {
         "session_id": "conv-41_s25",
+        "session_date": "6:21 pm on 22 July, 2023",
         "turns": [
           "John: Hi Maria! It's so good to talk again. A lot has changed since last time. I'm really enjoying my new job. My team has been super encouraging and inspiring.",
           "Maria: Hey John, glad work is going well! Having a good team is so important. I had a great experience last weekend hiking with my church  friends - it was great to be surrounded by supportive people and to enjoy nature. Felt so refreshing!",
@@ -3061,6 +3124,7 @@
       },
       {
         "session_id": "conv-41_s26",
+        "session_date": "1:59 pm on 31 July, 2023",
         "turns": [
           "Maria: Hey John, I'm doing ok - hope you are too. Some interesting stuff has been going on; last week I dropped off that stuff I baked at the homeless shelter. It was great and I'm more motivated than ever to help people.",
           "John: Hey Maria, that's awesome! I'm really inspired by your drive to make a difference. You mentioned your work at the homeless shelter last time and it made me think of how I could help too, so I just joined a fire-fighting brigade. It's such a great feeling to do something to give back to my community!",
@@ -3083,6 +3147,7 @@
       },
       {
         "session_id": "conv-41_s27",
+        "session_date": "6:20 pm on 3 August, 2023",
         "turns": [
           "John: Hey Maria, hope you're doing OK. I had to share something cool with you - I asked family and friends to join the virtual support group I am a part of and be advocates for the military. It's been awesome seeing so many people coming together to back the courageous people serving our nation.",
           "Maria: Wow, John! Way to go helping veterans! I'm doing my part too, volunteering at a homeless shelter. It's so rewarding.",
@@ -3104,6 +3169,7 @@
       },
       {
         "session_id": "conv-41_s28",
+        "session_date": "5:19 pm on 5 August, 2023",
         "turns": [
           "John: Hey Maria, great chatting with you again! Crazy thing happened since we last talked. I lost my job at the mechanical engineering company. They tanked and it's been really rough. Never saw this coming.",
           "Maria: Sorry to hear about your job, John. I can only imagine how tough it must be. How are you holding up?",
@@ -3128,6 +3194,7 @@
       },
       {
         "session_id": "conv-41_s29",
+        "session_date": "8:06 pm on 9 August, 2023",
         "turns": [
           "Maria: Hey John, what's been going on? I just wanted to check in. Last week was wild - I volunteered at the homeless shelter and they gave me a medal! It was humbling and I'm really glad I could help.",
           "John: Hey Maria! Congrats on the recognition! It's really touching to see how much you're doing to help out. Last weekend, I participated in a community event to raise money for a good cause. We got a great turnout and it was amazing to be surrounded by so many supportive people.",
@@ -3151,6 +3218,7 @@
       },
       {
         "session_id": "conv-41_s30",
+        "session_date": "12:10 am on 11 August, 2023",
         "turns": [
           "Maria: Hey John! Long time no talk! Guess what - I got a puppy two weeks ago! Her name's Coco and she's adorable.",
           "John: Wow, Maria! Coco looks so adorable! She seems so happy in that photo. How's it been having her around?",
@@ -3179,6 +3247,7 @@
       },
       {
         "session_id": "conv-41_s31",
+        "session_date": "3:14 pm on 13 August, 2023",
         "turns": [
           "John: Hi Maria, since we last chatted, I'm volunteering as a mentor for a local school. It's really rewarding to see how much I can help these students.",
           "Maria: Wow, John! You're doing great things. Kudos for helping kids learn. On another note, I just adopted this cute pup from a shelter last week. She brings so much joy! I feel blessed to be able to give her a home.",
@@ -3207,6 +3276,7 @@
       },
       {
         "session_id": "conv-41_s32",
+        "session_date": "11:08 am on 16 August, 2023",
         "turns": [
           "John: Hey Maria! Guess what? I'm now part of the fire-fighting brigade. I'm super excited to be involved and help out my community!",
           "Maria: Wow John, that's impressive! You're really enthusiastic about making a change. How's your experience been so far?",
@@ -4148,6 +4218,7 @@
     "sessions": [
       {
         "session_id": "conv-42_s1",
+        "session_date": "7:31 pm on 21 January, 2022",
         "turns": [
           "Nate: Hey Joanna! Long time no see! What's up? Anything fun going on?",
           "Joanna: Hey Nate! Long time no see! I've been working on a project lately - it's been pretty cool. What about you - any fun projects or hobbies?",
@@ -4175,6 +4246,7 @@
       },
       {
         "session_id": "conv-42_s2",
+        "session_date": "2:01 pm on 23 January, 2022",
         "turns": [
           "Joanna: Hey Nate! Haven't talked in a few days. Crazy things happened to me!",
           "Nate: Hi Joanna! Long time no see! What's been going on? You sound excited!",
@@ -4209,6 +4281,7 @@
       },
       {
         "session_id": "conv-42_s3",
+        "session_date": "9:27 am on 7 February, 2022",
         "turns": [
           "Joanna: Hey Nate, long time no see! The screenplay I sent in to the film festival has been on my mind all day everyday. I keep bouncing between crazy emotions like relief, excitement and worry! Fingers crossed a producer or director falls in love with it and it ends up on the big screen - that would be awesome!",
           "Nate: Hey Joanna! It is a big deal! I'm sure its been a wild ride. Sending some positive vibes and hoping someone likes it enough to get it on the big screen - that would be awesome!",
@@ -4239,6 +4312,7 @@
       },
       {
         "session_id": "conv-42_s4",
+        "session_date": "1:07 pm on 25 February, 2022",
         "turns": [
           "Nate: Hey Joanna! Sorry I haven't been around. I made my friend some ice cream and they loved it!",
           "Joanna: No worries, Nate! Glad to hear it. What flavor did you make?",
@@ -4263,6 +4337,7 @@
       },
       {
         "session_id": "conv-42_s5",
+        "session_date": "6:59 pm on 18 March, 2022",
         "turns": [
           "Joanna: Hey Nate, it's been a minute! I wrapped up my second script, and the feels have been wild. Sometimes I'm so relieved, but other times I just feel anxious about what comes next. It's a mix of excitement and terror, thinking about my work getting noticed and hitting the big screen.",
           "Nate: Hey Joanna! Awesome to hear from you! Congrats on wrapping up a second one! All that hard work and dedication will definitely shine through and get noticed, no doubt. Hope you've been able to take some time to relax after everything!",
@@ -4289,6 +4364,7 @@
       },
       {
         "session_id": "conv-42_s6",
+        "session_date": "1:43 pm on 24 March, 2022",
         "turns": [
           "Nate: Hey Joanna! Long time no talk, how's it going? Crazy stuff's been happening since we last chatted.",
           "Joanna: Hey Nate! Been quite a ride - in a good way - had an audition yesterday for a writing gig.",
@@ -4307,6 +4383,7 @@
       },
       {
         "session_id": "conv-42_s7",
+        "session_date": "7:37 pm on 15 April, 2022",
         "turns": [
           "Nate: Hey Jo, guess what I did? Dyed my hair last week - come see!",
           "Joanna: Wow, Nate! Can't wait to see it. Must feel so liberating! How're you feeling?",
@@ -4325,6 +4402,7 @@
       },
       {
         "session_id": "conv-42_s8",
+        "session_date": "6:44 pm on 17 April, 2022",
         "turns": [
           "Nate: Hey Joanna! Haven't talked with you in a while - how's it going?",
           "Joanna: Hey Nate! Great to hear from you. I've been reading a lot in the past week! There's a lot of good books I forgot I owned.",
@@ -4352,6 +4430,7 @@
       },
       {
         "session_id": "conv-42_s9",
+        "session_date": "7:44 pm on 21 April, 2022",
         "turns": [
           "Joanna: Hey Nate! Long time no talk! I wanted to tell ya I just joined a writers group. It's unbelievable--such inspirational people who really get my writing. I'm feeling so motivated and supported, it's like I finally belong somewhere!",
           "Nate: Hey Joanna! That's awesome! Having a supportive group around you can really make a difference. What kind of projects are you working on with them?",
@@ -4375,6 +4454,7 @@
       },
       {
         "session_id": "conv-42_s10",
+        "session_date": "11:54 am on 2 May, 2022",
         "turns": [
           "Joanna: Hey Nate, how's it going? I took your reccomendation and watched \"The Lord of the Rings\" Trilogy last night! It was awesome!",
           "Nate: Glad to hear you enjoyed it! It's probably the greatest trilogy of all time! As for me, life's been ok, just taking care of this.",
@@ -4396,6 +4476,7 @@
       },
       {
         "session_id": "conv-42_s11",
+        "session_date": "3:35 pm on 12 May, 2022",
         "turns": [
           "Joanna: Hey Nate! Great to hear from you! Quite a week since we last talked - something awesome happened to me!",
           "Nate: Hey Jo! Great hearing from you! What happened?",
@@ -4421,6 +4502,7 @@
       },
       {
         "session_id": "conv-42_s12",
+        "session_date": "7:49 pm on 20 May, 2022",
         "turns": [
           "Nate: Hey Joanna! How've you been? Been a busy week since we talked.",
           "Joanna: Hey Nate! Just finished something - pretty wild journey!",
@@ -4445,6 +4527,7 @@
       },
       {
         "session_id": "conv-42_s13",
+        "session_date": "3:00 pm on 25 May, 2022",
         "turns": [
           "Nate: Hey Jo! Been ages since we last talked. Here's something cool that happened the other day - I took Max for a walk and ran into this super nice couple who had a dog. It turns out they live close by. We decided to do doggy playdates, which is awesome considering we all need friends for our pets.",
           "Joanna: Hey Nate! Great to hear from you. Sounds like a nice encounter on your walk. Connecting with others who have pets can be uplifting and rewarding.",
@@ -4473,6 +4556,7 @@
       },
       {
         "session_id": "conv-42_s14",
+        "session_date": "5:44 pm on 3 June, 2022",
         "turns": [
           "Joanna: Nate, after finishing my screenplay I got a rejection letter from a major company. It really bummed me out.",
           "Nate: Sorry to hear that, Joanna. Rejection stinks, but it doesn't mean you're not talented. Don't give up on your dreams!",
@@ -4505,6 +4589,7 @@
       },
       {
         "session_id": "conv-42_s15",
+        "session_date": "2:12 pm on 5 June, 2022",
         "turns": [
           "Joanna: Hey Nate! Yesterday was crazy cool - I wrote a few bits for a screenplay that appeared on the big screen yesterday! It was nerve-wracking but so inspiring to see my words come alive!",
           "Nate: Congrats, Joanna! Seeing your hard work pay off like that must've felt amazing. I bet it was scary too, but awesome! You're so inspiring. By the way, last time we saw eachother, I noticed a spiderman pin on your purse. Is Spider-Man your favorite superhero, or do you have another fave?",
@@ -4527,6 +4612,7 @@
       },
       {
         "session_id": "conv-42_s16",
+        "session_date": "10:55 am on 24 June, 2022",
         "turns": [
           "Joanna: Hey Nate, long time no see! How have you been? I just got done submitting my recent screenplay to a film contest just to see how others might like it!",
           "Nate: That's really cool Joanna! I hope it does well, and I've been doing great! The gaming party was a great success! We even played some Chess afterward just for fun.",
@@ -4548,6 +4634,7 @@
       },
       {
         "session_id": "conv-42_s17",
+        "session_date": "2:34 pm on 10 July, 2022",
         "turns": [
           "Nate: Hey Joanna, check this out! I won my fourth video game tournament on Friday! It was awesome competing and showing off my skills - and the victory was indescribable. I'm really proud that I can make money doing what I love. This one was online!",
           "Joanna: Congrats, Nate! That's awesome! So proud of you. Your hard work really paid off - keep it up! BTW, I took a road trip for research for my next movie while you were winning. Much-needed break and a chance to explore new places and get inspired.",
@@ -4574,6 +4661,7 @@
       },
       {
         "session_id": "conv-42_s18",
+        "session_date": "6:12 pm on 14 August, 2022",
         "turns": [
           "Joanna: Hey Nate, long time no talk! I've been busy with writing projects and really going all out with it. It's been the best thing ever - a mix of highs and lows - and my journal's pretty much my rock. Writing's such a huge part of me now.",
           "Nate: Hey Joanna! Great to hear it! It's amazing how much a certain activity can become a part of our lives. Keep it up, you're inspiring! Is writing your way to solace and creativity?",
@@ -4595,6 +4683,7 @@
       },
       {
         "session_id": "conv-42_s19",
+        "session_date": "10:57 am on 22 August, 2022",
         "turns": [
           "Nate: Woah Joanna, I won an international tournament yesterday! It was wild. Gaming has brought me so much success and now I'm able to make a living at something I'm passionate about - I'm loving it.",
           "Joanna: Congrats, Nate! So proud of you for winning that tournament, that's awesome! Must feel great to turn your passion into a career.",
@@ -4622,6 +4711,7 @@
       },
       {
         "session_id": "conv-42_s20",
+        "session_date": "6:03 pm on 5 September, 2022",
         "turns": [
           "Nate: Hey Joanna! Long time no talk. So much has happened. Look how cute they are! Hanging with them has been a big help, especially recently. Speaking of which, I just had a letdown in a video game tourney - I didn't do too great, even though I tried. It was a setback, but I'm trying to stay positive.",
           "Joanna: Hey Nate! Cute turtles! Bummer about the setback. Any positive vibes comin' your way? I just revised on of my old recipes and made this!",
@@ -4646,6 +4736,7 @@
       },
       {
         "session_id": "conv-42_s21",
+        "session_date": "1:43 pm on 14 September, 2022",
         "turns": [
           "Joanna: Hey Nate, long time no see! My laptop crashed last week and I lost all my work - super frustrating! As a writer, my laptop is like half of my lifeline so losing all progress was like a major blow.",
           "Nate: Hey Joanna, sorry to hear about that. Losing so much progress must be really frustrating. Did you manage to recover anything? Maybe consider backing up your work in the future?",
@@ -4671,6 +4762,7 @@
       },
       {
         "session_id": "conv-42_s22",
+        "session_date": "11:15 am on 6 October, 2022",
         "turns": [
           "Joanna: Hey Nate, hi! Yesterday, I tried my newest dairy-free recipe and it was a winner with my family! Mixing and matching flavors is fun and I'm always trying new things. How about you?",
           "Nate: Hey Joanna! That tart looks yummy! Lately, I've been doing great - I won a really big video game tournament last week and it was awesome! I still can't believe I made so much money from it.",
@@ -4699,6 +4791,7 @@
       },
       {
         "session_id": "conv-42_s23",
+        "session_date": "10:58 am on 9 October, 2022",
         "turns": [
           "Nate: Hey Joanna, it's been a couple days since we last talked. Something exciting happened last Friday. I went to a game convention and met new people who weren't from my normal circle. It was a bit overwhelming but it reminded me of the good times gaming can bring.",
           "Joanna: Hey Nate! Good to hear from you. Sounds like fun! Meeting new people can be overwhelming, but the rewards can be great. Sometimes it's good to step outside our comfort zones and explore new things.",
@@ -4734,6 +4827,7 @@
       },
       {
         "session_id": "conv-42_s24",
+        "session_date": "2:01 pm on 21 October, 2022",
         "turns": [
           "Nate: Hey Joanna, what's been up? Haven't seen you since we last talked.",
           "Joanna: Hey Nate! I have been revising and perfecting the recipe I made for my family and it turned out really tasty. What's been happening with you?",
@@ -4758,6 +4852,7 @@
       },
       {
         "session_id": "conv-42_s25",
+        "session_date": "8:16 pm on 25 October, 2022",
         "turns": [
           "Nate: Hey Joanna, what's been up since we last chatted? How's it going?",
           "Joanna: Hey Nate! Another movie script that I contributed to was shown on the big screen last Sunday for the first time! It was such a surreal experience to see everything come together. I felt a mix of emotions, but overall, it was a satisfying moment. I've been waiting for this for a long time!",
@@ -4792,6 +4887,7 @@
       },
       {
         "session_id": "conv-42_s26",
+        "session_date": "3:56 pm on 4 November, 2022",
         "turns": [
           "Joanna: Wow, Nate, I'm on fire! I just set up meetings with movie producers — my dreams are comin' true!",
           "Nate: Wow Joanna, nice work! How did it go with those producer meetings?",
@@ -4821,6 +4917,7 @@
       },
       {
         "session_id": "conv-42_s27",
+        "session_date": "8:10 pm on 7 November, 2022",
         "turns": [
           "Nate: Hey Joanna! Hope you’re doing alright. Crazy thing happened - I was in the final of a big Valorant tournament last Saturday, and I won! It was the best feeling to see my name as the champion. Tournaments really bring out strong emotions in me.",
           "Joanna: Hey Nate! Congrats on winning the tournament - that's awesome! I know you must have been buzzing! Anyway, I've been working on something exciting too. Last Friday, I finished the presentation for producers - it was tough but it's looking good. What have you been up to?",
@@ -4864,6 +4961,7 @@
       },
       {
         "session_id": "conv-42_s28",
+        "session_date": "5:54 pm on 9 November, 2022",
         "turns": [
           "Nate: Hey Joanna, what a wild week! My game tournament got pushed back, so I tried out some cooking. Look at this homemade coconut ice cream! The sprinkles kinda changed the color this time around.",
           "Joanna: Hey Nate, that looks yummy! Wish I could try it, but I can't right now. How did the last game tournament go?",
@@ -4902,6 +5000,7 @@
       },
       {
         "session_id": "conv-42_s29",
+        "session_date": "12:06 am on 11 November, 2022",
         "turns": [
           "Joanna: Nate, can you believe it? I'm finally filming my own movie from the road-trip script!",
           "Nate: Congrats, Joanna! Not surprised at all that your hard work paid off. Must feel awesome to see your script come alive in a movie! Pretty cool when something you love brings success, right? Tell me more about your movie!",
@@ -6123,6 +6222,7 @@
     "sessions": [
       {
         "session_id": "conv-43_s1",
+        "session_date": "7:48 pm on 21 May, 2023",
         "turns": [
           "John: Hey Tim, nice to meet you! What's up? Anything new happening?",
           "Tim: Hey John! Great to meet you. Been discussing collaborations for a Harry Potter fan project I am working on - super excited! Anything interesting happening for you?",
@@ -6148,6 +6248,7 @@
       },
       {
         "session_id": "conv-43_s2",
+        "session_date": "5:08 pm on 15 June, 2023",
         "turns": [
           "Tim: Last night I joined a fantasy literature forum and had a great talk about my fave books. It was so enriching!",
           "John: Wow, great to hear that you had a blast talking books! It's cool to connect with others who share your passion. On a different note, exciting things are happening--I'm exploring endorsement opportunities. Thinking about the possibilities pumps me up. It would be amazing to work with brands and do something special. It's so rewarding to have my hard work pay off like this.",
@@ -6172,6 +6273,7 @@
       },
       {
         "session_id": "conv-43_s3",
+        "session_date": "4:21 pm on 16 July, 2023",
         "turns": [
           "John: Hey Tim! Good to see you again. So much has happened in the last month - on and off the court. Last week I scored 40 points, my highest ever, and it feels like all my hard work's paying off.",
           "Tim: Congrats on your achievement! I'm so proud of you. Last week, I had a nice chat with a Harry Potter fan in California. It was magical!",
@@ -6212,6 +6314,7 @@
       },
       {
         "session_id": "conv-43_s4",
+        "session_date": "4:17 pm on 2 August, 2023",
         "turns": [
           "Tim: Hey John! How've you been? Something awesome happened - I'm writing articles about fantasy novels for an online mag. It's so rewarding!",
           "John: Hey Tim! Congrats on the opportunity to write about what you're into! How did it happen?",
@@ -6232,6 +6335,7 @@
       },
       {
         "session_id": "conv-43_s5",
+        "session_date": "10:29 am on 9 August, 2023",
         "turns": [
           "Tim: Hey John! Long time no see! Been super busy lately. Guess what? Just skyped with that Harry Potter fan I met in CA and had a great time. We talked characters and maybe collab-ing - so cool to talk to someone who gets it. You? Anything new going on?",
           "John: Hi Tim! Nice to hear from you. Glad you could reconnect. As for me, lots of stuff happened since we last talked. Last week I had a crazy game - crazy intense! We won it by a tight score. Scoring that last basket and hearing the crowd cheer was awesome!",
@@ -6257,6 +6361,7 @@
       },
       {
         "session_id": "conv-43_s6",
+        "session_date": "1:08 pm on 11 August, 2023",
         "turns": [
           "John: Hey Tim, sorry I missed you. Been a crazy few days. Took a trip to a new place - it's been amazing. Love the energy there.",
           "Tim: Hey John, no worries! I get how life can be busy. Where did you go? Glad you had a great time! Exploring new places can be so inspiring and fun. I recently went to an event and it was fantastic. Being with other fans who love it too was so special. Have you ever gone to an event related to something you like?",
@@ -6285,6 +6390,7 @@
       },
       {
         "session_id": "conv-43_s7",
+        "session_date": "7:54 pm on 17 August, 2023",
         "turns": [
           "John: Hey Tim! We had a wild few days since we talked. I met back up with my teammates on the 15th after my trip and it was amazing! Everyone missed me. The atmosphere was electric and I felt so welcome being back with them. I'm so lucky to be a part of this team!",
           "Tim: Wow, John, that sounds amazing! I'm so happy they gave you a warm welcome back. It's such a special feeling when you realize that you share the same passions and talents with others. It's like finding your true place in the world.",
@@ -6306,6 +6412,7 @@
       },
       {
         "session_id": "conv-43_s8",
+        "session_date": "4:29 pm on 21 August, 2023",
         "turns": [
           "John: Hey Tim! Long time no talk. Hope you're doing great. Crazy things have been going on in my life. Just the other day, I found a new gym to stay on my b-ball game. Staying fit is essential to surviving pro ball, so I had to find something that fits the bill. Finding the right spot was tough but here we are!",
           "Tim: Hey John! Really good to hear from you. Staying fit is so important. Must be so cool to practice there. Any issues you had when you got it?",
@@ -6348,6 +6455,7 @@
       },
       {
         "session_id": "conv-43_s9",
+        "session_date": "6:59 pm on 26 August, 2023",
         "turns": [
           "Tim: Hey John, this week's been really busy for me. Assignments and exams are overwhelming. I'm not giving up though! I'm trying to find a way to juggle studying with my fantasy reading hobby. How have you been?",
           "John: Hey Tim! I know the stress of exams and homework, but you got this! I'm doing OK, cheers for asking. Last week I visited home and caught up with my family and old friends. We had a great time talking about our childhood - it reminds me of the good ol' times!",
@@ -6368,6 +6476,7 @@
       },
       {
         "session_id": "conv-43_s10",
+        "session_date": "2:52 pm on 31 August, 2023",
         "turns": [
           "Tim: Hey John, it's been a few days! I got a no for a summer job I wanted which wasn't great but I'm staying positive. On your NYC trip, did you have any troubles? How did you handle them?",
           "John: Hey Tim! Sorry to hear about the job, but your positivity will help you find something great! My trip went okay - I had some trouble figuring out the subway at first, but then it was easy after someone helped explain it. How about you? Anything new you've tackled?",
@@ -6390,6 +6499,7 @@
       },
       {
         "session_id": "conv-43_s11",
+        "session_date": "8:17 pm on 21 September, 2023",
         "turns": [
           "John: Hey Tim, been a while! How ya been?",
           "Tim: Hey John! Great to hear from you. Been busy with things, how about you?",
@@ -6425,6 +6535,7 @@
       },
       {
         "session_id": "conv-43_s12",
+        "session_date": "3:00 pm on 2 October, 2023",
         "turns": [
           "Tim: Hey John! Awesome catchin' up with you! A lot's changed since last time.",
           "John: Hey, Tim! Good to hear from you. Anyway, a lot has been going on with me. My girlfriend and I had an amazing and emotional wedding ceremony last week.",
@@ -6459,6 +6570,7 @@
       },
       {
         "session_id": "conv-43_s13",
+        "session_date": "1:50 pm on 13 October, 2023",
         "turns": [
           "Tim: Hey John! It's been ages since we last talked. Guess what? Last week I went to a Harry Potter conference in the UK - it was incredible! There were so many people who shared the same love of HP as me, it was like a magical family. I felt so inspired and like I got a new lease of life. I love how my passion for fantasy stuff brings me closer to people from all over the world, it's pretty cool.",
           "John: Hey Tim! Great to hear from you. It's awesome how our passions connect us with others, yeah? You sound like you fit right in and got a real buzz out of it. I feel the same way with my team.",
@@ -6486,6 +6598,7 @@
       },
       {
         "session_id": "conv-43_s14",
+        "session_date": "1:50 pm on 17 October, 2023",
         "turns": [
           "John: Hey Tim! Long time no talk - a lot has been going on since then!",
           "Tim: Hey John! Long time no see! Can't wait to catch up and hear all about what you've been up to.",
@@ -6514,6 +6627,7 @@
       },
       {
         "session_id": "conv-43_s15",
+        "session_date": "5:51 pm on 21 October, 2023",
         "turns": [
           "Tim: Hey John! Haven't talked to you in a bit but wanted to let you know I read this awesome book about castles in the UK. It was so interesting and blew me away! I dream of visiting them one day.",
           "John: Hey Tim! Great to hear from you. Learning about different cultures and seeing historical architecture fascinates me. Visiting castles is really on my bucket list. Just look at this one; what a sight! I'm so excited to explore the world and experience these gorgeous places. On that note, how's your fantasy writing going?",
@@ -6557,6 +6671,7 @@
       },
       {
         "session_id": "conv-43_s16",
+        "session_date": "11:41 am on 6 November, 2023",
         "turns": [
           "Tim: Hey John, long time no see! Hope you've been doing well. Since we last chat, some stuff's happened. Last week, I had a huge writing issue - got stuck on a plot twist and couldn't find my way out. It was crazy frustrating, but I kept pushing and eventually got the ideas flowing again.",
           "John: Hey Tim! Awesome to hear from you. Yeah, I get how that would've been so annoying! But you stuck it out, that's so cool. Same with me on the court. Just gotta find a way to tough it out and keep things flowing. Then when you make it through, it's all the more satisfying, right?",
@@ -6579,6 +6694,7 @@
       },
       {
         "session_id": "conv-43_s17",
+        "session_date": "3:36 pm on 11 November, 2023",
         "turns": [
           "John: Hey Tim! Great to chat again. So much has happened!",
           "Tim: Hey John! Great chatting with you as always. What's been happening lately? I've been reading as usual.",
@@ -6603,6 +6719,7 @@
       },
       {
         "session_id": "conv-43_s18",
+        "session_date": "3:59 pm on 16 November, 2023",
         "turns": [
           "Tim: Hey John! Hope you're doing good. Guess what? I went to a castle during my trip to the UK last Friday and it was unbelievable! The architecture and the history were amazing!",
           "John: Hey Tim! That's awesome! Yeah, it was really cool. Oh man, it's been a tough week for me with this injury. But I'm staying positive. How about you? How's your week been?",
@@ -6623,6 +6740,7 @@
       },
       {
         "session_id": "conv-43_s19",
+        "session_date": "10:22 am on 21 November, 2023",
         "turns": [
           "Tim: Hey John! Haven't talked in a bit, how ya been? Hope your injury is feeling better.",
           "John: Hey Tim! Thanks for checking in. It's been tough, but I'm staying positive and taking it slow. How about you? How have you been?",
@@ -6651,6 +6769,7 @@
       },
       {
         "session_id": "conv-43_s20",
+        "session_date": "9:52 am on 1 December, 2023",
         "turns": [
           "Tim: Hey John! It's been ages since we last chatted. I had a tough exam last week that had me doubting myself. But instead of giving up, I turned it into a learning experience. I studied hard and it showed me how resilient and determined I can be. Here's a pic of my success 👍",
           "John: Hi Tim! Congrats on your success! Keep it up, you're doing great! I'm also trying out yoga to get a little extra strength and flexibility. It's challenging but worth it.",
@@ -6699,6 +6818,7 @@
       },
       {
         "session_id": "conv-43_s21",
+        "session_date": "5:34 pm on 6 December, 2023",
         "turns": [
           "Tim: Hey John! Haven't talked in a few days, wanted to let you know I joined a travel club! Always been interested in different cultures and countries and I'm excited to check it out. Can't wait to meet new people and learn about what makes them unique!",
           "John: Hey Tim! That's cool! I love learning about different cultures. It's really cool to meet people with different backgrounds. My teammates come from all over.",
@@ -6723,6 +6843,7 @@
       },
       {
         "session_id": "conv-43_s22",
+        "session_date": "7:42 pm on 8 December, 2023",
         "turns": [
           "Tim: Hey John! Long time no see! I just got back from the coolest Harry Potter party. Met lots of awesome people who were into the same stuff as me, had so much fun!",
           "John: Hey Tim! Sounds awesome! So glad you had a blast at the Harry Potter party. Last August I told you about my fun time at a charity event with Harry Potter trivia. Love being with people who are as passionate about Harry Potter as us! Did you dress up as any character?",
@@ -6746,6 +6867,7 @@
       },
       {
         "session_id": "conv-43_s23",
+        "session_date": "8:28 pm on 11 December, 2023",
         "turns": [
           "John: Hey Tim, great to see you! Any new success stories?",
           "Tim: Hey John, I had a tough time with my English lit class. Did an analysis on this series and I think it went ok!",
@@ -6767,6 +6889,7 @@
       },
       {
         "session_id": "conv-43_s24",
+        "session_date": "3:37 pm on 16 December, 2023",
         "turns": [
           "Tim: Hey John, catch up time! What've you been up to? Any good b-ball games lately?",
           "John: Hey Tim! Nice to talk again. The b-ball games have been crazy. We had a real battle against another team last week. It was close until the final buzzer but we got the win.",
@@ -6792,6 +6915,7 @@
       },
       {
         "session_id": "conv-43_s25",
+        "session_date": "10:04 am on 19 December, 2023",
         "turns": [
           "Tim: Hey John, been a while since we chatted. How's it going?",
           "John: Yo Tim! Great to hear from you. Things have been wild! Last week I got this amazing deal with a renowned outdoor gear company. So pumped!",
@@ -6814,6 +6938,7 @@
       },
       {
         "session_id": "conv-43_s26",
+        "session_date": "3:35 pm on 26 December, 2023",
         "turns": [
           "John: Hey Tim! Great to hear from you. My week's been busy - I started doing seminars, helping people with their sports and marketing. It's been awesome!",
           "Tim: Hey John! Sounds awesome! Congrats on how far you've come. How did it go?",
@@ -6857,6 +6982,7 @@
       },
       {
         "session_id": "conv-43_s27",
+        "session_date": "5:26 pm on 2 January, 2024",
         "turns": [
           "Tim: Hi John, how's it going? Interesting things have happened since we last talked - I joined a group of globetrotters who are into the same stuff as me. It's been awesome getting to know them and hear about their trips.",
           "John: Hey Tim! Cool to hear about your globetrotting group! Must be great connecting with other traveling buffs. By the way, have you been to Italy? I had a blast there last month.",
@@ -6902,6 +7028,7 @@
       },
       {
         "session_id": "conv-43_s28",
+        "session_date": "5:24 pm on 7 January, 2024",
         "turns": [
           "Tim: Hey John, long time no talk. On Friday, I got great news - I'm finally in the study abroad program I applied for! Next month, I'm off to Ireland for a semester.",
           "John: Congrats, Tim! That's amazing news. So, where are you going to stay?",
@@ -6928,6 +7055,7 @@
       },
       {
         "session_id": "conv-43_s29",
+        "session_date": "1:41 pm on 12 January, 2024",
         "turns": [
           "Tim: Hey John! How's it going? Hope all is good.",
           "John: Hey Tim! Things have been good. Something exciting happened recently for me. What about you? How's everything going?",
@@ -8023,6 +8151,7 @@
     "sessions": [
       {
         "session_id": "conv-44_s1",
+        "session_date": "1:10 pm on 27 March, 2023",
         "turns": [
           "Audrey: Hey Andrew! Good to see ya! What's been up since we last talked?",
           "Andrew: Hey Audrey! So, I started a new job as a Financial Analyst last week - it's been quite a change from my previous job. How about you? Anything interesting happening?",
@@ -8052,6 +8181,7 @@
       },
       {
         "session_id": "conv-44_s2",
+        "session_date": "2:42 pm on 2 April, 2023",
         "turns": [
           "Audrey: Hey Andrew, I got a surprise for you! We adopted another puppy called Pixie. She's SO cute! Isn't she just the cutest?",
           "Andrew: That's awesome! Pixie is so cute! Did you ever check out that hiking spot we talked about last time?",
@@ -8083,6 +8213,7 @@
       },
       {
         "session_id": "conv-44_s3",
+        "session_date": "4:19 pm on 16 April, 2023",
         "turns": [
           "Andrew: Hey Audrey! What's up? Missed chatting with ya! Check it out, my girl & I tried out that new cafe scene in the city last weekend! Super fun but kinda sad not being out in nature - that's when I feel like I'm really thriving. Oh man, I miss the peacefulness of being out on a hike.",
           "Audrey: Hey Andrew! That cafe sounds pretty awesome, glad you enjoyed it. Yeah, I know what you mean. That feeling of being out in nature, surrounded by beauty and peace, is unbeatable, compared to being surrounded by concrete jungles. ",
@@ -8119,6 +8250,7 @@
       },
       {
         "session_id": "conv-44_s4",
+        "session_date": "5:41 pm on 3 May, 2023",
         "turns": [
           "Audrey: Hey Andrew! Long time no talk! Last week I finally went on a hike and had this amazing experience with a hummingbird. It was so cool watching it dart around with its wings! Nature is so beautiful.",
           "Andrew: Hey Audrey! Glad to hear from you. That hummingbird was awesome! Nature's the best. Remember I was feeling down because I couldn't get out more? Well, good news - I found a new open space to hike nearby - feels so refreshing!",
@@ -8154,6 +8286,7 @@
       },
       {
         "session_id": "conv-44_s5",
+        "session_date": "10:47 am on 6 May, 2023",
         "turns": [
           "Andrew: Hey! Since we last spoke, I've been looking for a doggo to adopt - browsing websites, visiting shelters and asking friends of theirs. It's been both fun and annoying!",
           "Audrey: Sounds like a fun and demanding task! Getting to meet new pups must bring so much happiness. What  do you think you can do to make the process smoother?",
@@ -8181,6 +8314,7 @@
       },
       {
         "session_id": "conv-44_s6",
+        "session_date": "2:03 pm on 11 May, 2023",
         "turns": [
           "Andrew: Hi Audrey! I had a great hike last weekend with some friends and my girlfriend at the spot we found recently. Nature was so peaceful – it was so nice to just relax and take it in. How's your week been? Anything exciting going on lately?",
           "Audrey: Hey Andrew! That hike sounds great. Nature is good for the soul, right? My week's been good - taking care of my four doggies and making sure they're happy and healthy took up most of my free time. Also, exciting news! I signed up for a workshop about bonding with my pet next month. Can't wait to learn new stuff and strengthen my bond with my pets. What's up with you?",
@@ -8202,6 +8336,7 @@
       },
       {
         "session_id": "conv-44_s7",
+        "session_date": "11:27 am on 2 June, 2023",
         "turns": [
           "Audrey: Hey how's it going? Yesterday took my pups to the park, it was awesome! Seeing them running around and playing without a leash was awesome. It filled my heart with joy - their happiness brought me so much peace. ",
           "Andrew: That sounds amazing! Must have been so happy watching them running around. It's moments like that which show us how amazing animals are. Glad you had a great time. By the way, I think you mentioned before that you've taken them on a hiking trip? ",
@@ -8220,6 +8355,7 @@
       },
       {
         "session_id": "conv-44_s8",
+        "session_date": "5:23 pm on 13 June, 2023",
         "turns": [
           "Andrew: Hey! Long time no chat. Last Sunday was awesome - my friends and I took a rock climbing class and I made it to the top! It was a fantastic experience and now I'm hooked. Think I'm going to try to do more outdoor activities like this every week!",
           "Audrey: That's awesome! Glad you had such a rad experience rock climbing. I'm always in awe of people who can climb mountains. Got any pics or videos from your climb? Would love to see the view from the top!",
@@ -8253,6 +8389,7 @@
       },
       {
         "session_id": "conv-44_s9",
+        "session_date": "1:51 pm on 26 June, 2023",
         "turns": [
           "Audrey: Woohoo! I got a new place with a bigger backyard for the pooches! Take a look!",
           "Andrew: That's awesome! Your new place looks great. Your fur babies must be thrilled with the bigger backyard. I'm sure they're having a blast running around. How are they settling in?",
@@ -8285,6 +8422,7 @@
       },
       {
         "session_id": "conv-44_s10",
+        "session_date": "8:32 pm on 3 July, 2023",
         "turns": [
           "Audrey: Hey! It's been a while. I'm taking a dog training course and it's challenging but rewarding. My dogs are doing better already. What's new with you?",
           "Andrew: Hey great to hear from you! Life's thrown me a few curveballs lately. Still can't seem to find any dog-friendly spots to rent. That's a bummer. Have you been able to do any exploring on new trails?",
@@ -8319,6 +8457,7 @@
       },
       {
         "session_id": "conv-44_s11",
+        "session_date": "9:48 am on 8 July, 2023",
         "turns": [
           "Andrew: Hey how's it going? Last Friday was amazing - I had a picnic with my girlfriend and it was so much fun! Being in the nature can be so refreshing and it always brings me joy. ",
           "Audrey: Wow sounds like the picnic was awesome! Yeah being in the nature is so nice. My furry friends always make me happy. We had a great walk the other day - felt really good!",
@@ -8362,6 +8501,7 @@
       },
       {
         "session_id": "conv-44_s12",
+        "session_date": "10:05 am on 11 July, 2023",
         "turns": [
           "Andrew: Hey! So much has changed since last time we talked - meet Toby, my puppy. He's a bundle of joy and I couldn't resist taking him home, city living and all. How've you been?",
           "Audrey: OMG! Toby looks so adorable! Congrats on your new addition. I'm sure you're really happy right now! I so happy for you!",
@@ -8384,6 +8524,7 @@
       },
       {
         "session_id": "conv-44_s13",
+        "session_date": "3:52 pm on 27 July, 2023",
         "turns": [
           "Andrew: Hey Audrey! How are you? My GF and I just had a great experience volunteering at a pet shelter on Monday - it was so rewarding! We loved spending time with those cute animals and it gave us so much joy. It was so rewarding, it reminded me just how much I love them!",
           "Audrey: Hi Andrew! I'm good, thanks. That's awesome about the pet shelter volunteering. Helping animals really is great and you can tell when they're happy! So happy for you getting to experience that! I should do that someday too!",
@@ -8405,6 +8546,7 @@
       },
       {
         "session_id": "conv-44_s14",
+        "session_date": "11:05 am on 4 August, 2023",
         "turns": [
           "Andrew: Hey, Audrey! I can't wait for the weekend. My girlfriend, Toby and I are going camping. It's been forever since I've been in nature.",
           "Audrey: That's awesome! That must be fun! I just started agility classes with my pups at a dog park. It's awesome to watch them learn and build relationships with other dogs. Seeing them face and conquer challenges really warms my heart.",
@@ -8437,6 +8579,7 @@
       },
       {
         "session_id": "conv-44_s15",
+        "session_date": "9:58 pm on 16 August, 2023",
         "turns": [
           "Audrey: Hey Andrew, since we last spoke I got another tattoo of my four dogs on my arm! They really mean a lot to me so I thought it'd be nice to have them with me wherever I go. What've you been up to?",
           "Andrew: Wow that's so cool! I recently went to a farm with my girlfriend to get some fresh veggies for dinner, and it was really nice. Have you been thinking about getting more fur babies or is four enough?",
@@ -8461,6 +8604,7 @@
       },
       {
         "session_id": "conv-44_s16",
+        "session_date": "9:19 pm on 19 August, 2023",
         "turns": [
           "Andrew: Hey Audrey, hope you're doing good! So I've decided to take a break from work yesterday and check out a new cafe. It was a nice change and reminded me of how the great outdoors is always there to offer you peace. Here's a photo from my last hike - so serene! How's your month been so far?",
           "Audrey: Hi Andrew! The cafe sounds great, and the hike pic's great! August's been eventful - I learned a new skill! It was really awesome, making sure they were pampered and happy. I've always loved caring for my pups, and now taking care of their grooming myself makes me closer to them. They look so cute post-grooming!",
@@ -8485,6 +8629,7 @@
       },
       {
         "session_id": "conv-44_s17",
+        "session_date": "12:24 am on 24 August, 2023",
         "turns": [
           "Andrew: Hey Audrey! What's up? Last weekend my girlfriend and I went fishing in one of the nearby lakes. It was so nice. We got a few fish and had a blast. Have you ever gone fishing before?",
           "Audrey: Hey! Actually I've never been fishing. It's always been just chilling at the lake. I remember this moment a few years back when I sat by a gorgeous lake in the mountains with friends. So peaceful and calming. Just the sound of the birds, the stillness of the water, and the fresh air - it was so special. But yeah I have never gone on a fishing trip before. Here's a photo of the trip to the lake with my friend.",
@@ -8511,6 +8656,7 @@
       },
       {
         "session_id": "conv-44_s18",
+        "session_date": "7:49 pm on 6 September, 2023",
         "turns": [
           "Andrew: Hey Audrey, how's it going? Since we last talked, a few new things have come up in my life. Work's been tough and stressful, so my outdoor activities have taken a backseat. Finding balance has been challenging.",
           "Audrey: Hey Andrew, good to hear from you. Sorry to hear about work being tough. Finding that balance can be challenging, huh? It can feel like there's not enough time. Just remember to take care of yourself and find ways to manage stress. Hang in there!",
@@ -8538,6 +8684,7 @@
       },
       {
         "session_id": "conv-44_s19",
+        "session_date": "5:53 pm on 24 September, 2023",
         "turns": [
           "Andrew: Hey Audrey! Long time no talk! How have you been?",
           "Audrey: Hey! I'm alright. Had some bumps though - last Friday at the park one of my pups saw something and pulled so hard the leash busted. Scared that she might run off and get hurt, so I had to chase after her. Luckily I caught her before anything bad happened. Little moments like this remind me how important she is and how we should be careful when we're out there.",
@@ -8573,6 +8720,7 @@
       },
       {
         "session_id": "conv-44_s20",
+        "session_date": "7:09 pm on 1 October, 2023",
         "turns": [
           "Andrew: Hey wassup? Got some great news - the gf and I are hitting the beach next month with Toby!",
           "Audrey: Hey Andrew! Great to hear from you. Have fun at the beach trip! Bet you can't wait to get out to the nature. Can't wait for our hike with the dogs next month. They always put a smile on my face - life's just not the same without them!",
@@ -8618,6 +8766,7 @@
       },
       {
         "session_id": "conv-44_s21",
+        "session_date": "4:18 pm on 4 October, 2023",
         "turns": [
           "Andrew: Hi Audrey! Been a while since I hear from you. How's it been?",
           "Audrey: Hey Andrew! It's been a wild ride! I did something fun with my pups over the weekend, took them to the beach and it was so fun to see them playing in the ocean.",
@@ -8641,6 +8790,7 @@
       },
       {
         "session_id": "conv-44_s22",
+        "session_date": "9:41 pm on 6 October, 2023",
         "turns": [
           "Audrey: Hey Andrew, I was thinking about what you said about missing nature the other day. It reminded me of when I couldn't walk my dogs because of a knee injury. It was tough 'cause they bring me so much joy. This pic was taken after I started walking again. It felt great to be able to get back out there!",
           "Andrew: You know how it feel right? Bummer not being able to take them for a stroll. They must've been over the moon when you could finally take them out again. Glad you got that adorable pic too! Dogs are awesome like that, huh? Remind us to stop and smell the roses.",
@@ -8659,6 +8809,7 @@
       },
       {
         "session_id": "conv-44_s23",
+        "session_date": "4:22 pm on 13 October, 2023",
         "turns": [
           "Andrew: Hey Audrey, it's been a busy week for me. Last Tuesday, my gf, Toby, and I had a really awesome night playing board games. It was really nice. What's been up with you lately?",
           "Audrey: Hey! Sounds like you've been busy! I made some goodies recently to thank my neighbors for their pup-friendly homes. It was a nice way to bring some joy around here. Any plans for the weekend?",
@@ -8692,6 +8843,7 @@
       },
       {
         "session_id": "conv-44_s24",
+        "session_date": "6:12 pm on 19 October, 2023",
         "turns": [
           "Audrey: Hey Andrew, hope you're doing ok. I recently had a good week - I went to a pet store last Monday to buy toys for my dogs and it was great seeing them so excited when I got them home. It made me realize how much I love them and how much joy they bring me.",
           "Andrew: Hi Audrey! Pets really can make our lives better, huh? Speaking of which, I've got some awesome news -- I recently adopted another pup from a shelter. He's the best.",
@@ -8719,6 +8871,7 @@
       },
       {
         "session_id": "conv-44_s25",
+        "session_date": "10:14 am on 24 October, 2023",
         "turns": [
           "Andrew: Hi Audrey! How have you been lately? My girlfriend and I went to this awesome wine tasting last weekend. It was great! We tried so many unique wines and learned a lot. I was surprised at how much I enjoyed it. A reminder to step out of the comfort zone!",
           "Audrey: Hey! Ha, glad you had fun at the wine tasting. Yeah, trying new things can be cool. By the way, I had an unexpected adventure last week. I had an accident while playing with my pups at the park. Taking care of them with one arm has been tricky but we're managing. What's been up with you? Any new interests?",
@@ -8740,6 +8893,7 @@
       },
       {
         "session_id": "conv-44_s26",
+        "session_date": "2:36 pm on 28 October, 2023",
         "turns": [
           "Audrey: Hey Andrew, I wanted to let you know about something going on with my dogs. I noticed they weren't acting normally, so I made an appointment with an animal behaviorist last Wed. It's been a bit hectic but I'm hopeful it'll help me better understand them.",
           "Andrew: Oh no! Sorry to hear that your dogs haven't been themselves. Are they doing ok? How did the appointment with the animal behaviorist go? Did you receive any helpful advice or insights?",
@@ -8792,6 +8946,7 @@
       },
       {
         "session_id": "conv-44_s27",
+        "session_date": "7:59 pm on 4 November, 2023",
         "turns": [
           "Andrew: Hey Audrey, had a great weekend! My girlfriend and I went on a bike ride and stumbled upon a cool park outside of town. It was awesome to get away from the city and be surrounded by nature.",
           "Audrey: That's cool! I love checking out new parks with my four pups. Last weekend was so fun - our dogs were able to run around and get some fresh air. On top of that, I recently joined a dog owners group to learn how to better take care of them.",
@@ -8815,6 +8970,7 @@
       },
       {
         "session_id": "conv-44_s28",
+        "session_date": "9:02 am on 22 November, 2023",
         "turns": [
           "Audrey: Hey Andrew! Long time no talk! Last Friday I took my fur kids to the pet salon - they were so psyched and their tails were wagging like crazy! It took a while for them to calm down, but all cut up they looked so cute! ",
           "Andrew: Hey Audrey! Nice to hear from you. Sounds adorable! Do you have any pictures of them all groomed up?",
@@ -9583,6 +9739,7 @@
     "sessions": [
       {
         "session_id": "conv-47_s1",
+        "session_date": "3:47 pm on 17 March, 2022",
         "turns": [
           "John: Hey! Glad to finally talk to you. I want to ask you, what motivates you?",
           "James: Hey John! Video games give me tons of joy and excitement, so they keep me motivated!",
@@ -9625,6 +9782,7 @@
       },
       {
         "session_id": "conv-47_s2",
+        "session_date": "9:26 pm on 20 March, 2022",
         "turns": [
           "James: Hey John, something awesome happened since we talked. I made a game avatar and joined a new platform. It's so fun exploring and chatting with other gamers - it's a whole new adventure every time! I feel like I'm part of a super cool online community.",
           "John: Hey James, awesome! Glad you're enjoying it and connecting with others. Building a community is really cool, especially when you meet people who enjoy the same things.",
@@ -9651,6 +9809,7 @@
       },
       {
         "session_id": "conv-47_s3",
+        "session_date": "12:40 am on 27 March, 2022",
         "turns": [
           "John: Hey James, long time no see! I had a big win in my game last week - finally advanced to the next level! It was a huge confidence booster and felt like I'd really achieved something.",
           "James: Hey John, congrats on your win! Games can really boost confidence, huh? I'm challenging myself too - I'm learning this instrument, which has been quite the journey.\n",
@@ -9679,6 +9838,7 @@
       },
       {
         "session_id": "conv-47_s4",
+        "session_date": "2:13 pm on 4 April, 2022",
         "turns": [
           "John: Hey James! Long time no chat. What's up? Been playing any new games lately?",
           "James: Hey John! Yeah, it's been a while. I've been busy, but I joined an online gaming tournament yesterday. It was so intense and fun! Here is a photo report.",
@@ -9709,6 +9869,7 @@
       },
       {
         "session_id": "conv-47_s5",
+        "session_date": "9:52 am on 12 April, 2022",
         "turns": [
           "James: Hey John! Long time no chat - I adopted a pup from a shelter in Stamford last week and my days have been so much happier with him in the fam. I named it Ned. Any progress on your gaming goals?",
           "John: Hey James! Congrats on getting a pup! They really do make days brighter. I haven't made much progress with gaming lately, life's been busy with work and stuff but it's always nice to remember how happy gaming makes me. It's a good way to forget the stresses of life.",
@@ -9730,6 +9891,7 @@
       },
       {
         "session_id": "conv-47_s6",
+        "session_date": "9:32 pm on 20 April, 2022",
         "turns": [
           "John: Hey James! Long time no see! I have great news! Last Tuesday I met three cool new friends in my programming course, they share the same passion as me and it's cool to grow my social circle. Have you had any fun surprises lately?",
           "James: Hey John! Glad you had a great week meeting new people! Something awesome happened to me last Thursday – I got to work with one of my gaming pals on a programming project! We combined programming and gaming, and created this virtual world inspired by Witcher 3. It was awesome to see our ideas come to life!",
@@ -9754,6 +9916,7 @@
       },
       {
         "session_id": "conv-47_s7",
+        "session_date": "11:04 am on 23 April, 2022",
         "turns": [
           "John: Hey James! How's it going?",
           "James: Hey John! Good to hear from ya. Yeah, been crazy. Last Thursday I took my dogs out for a hike. Was quite the adventure! Explored some nice trails and enjoyed fresh air.",
@@ -9780,6 +9943,7 @@
       },
       {
         "session_id": "conv-47_s8",
+        "session_date": "2:36 pm on 29 April, 2022",
         "turns": [
           "James: Hey John! What's up? Anything fun going on?",
           "John:  I'm currently taking on some freelance programming to hone my coding skills. It's challenging, but I'm determined to improve.",
@@ -9825,6 +9989,7 @@
       },
       {
         "session_id": "conv-47_s9",
+        "session_date": "7:01 pm on 4 May, 2022",
         "turns": [
           "John: Hey James! How've you been? Had an eventful week since our last chat.",
           "James: Hey John! Man, it's been wild since we talked. Last Friday, something happened on my project that I've been working on for weeks. I got so close to finishing it but I just couldn't figure it out. Super frustrating.",
@@ -9855,6 +10020,7 @@
       },
       {
         "session_id": "conv-47_s10",
+        "session_date": "12:45 am on 8 May, 2022",
         "turns": [
           "James: Hey John! Been a while since we chatted. Sorry 'bout not getting back sooner. How's it going? Any new games you're into?",
           "John: Hey James! No worries, I know you are really busy at work. I'm good, thanks for asking. Oh, I've been organizing something with my friends yesterday - it was cool! Guess what it was, I'll give you a little hint.",
@@ -9875,6 +10041,7 @@
       },
       {
         "session_id": "conv-47_s11",
+        "session_date": "5:00 pm on 11 May, 2022",
         "turns": [
           "John: Hey James, it's been a bit since we last talked. Something cool happened recently - I volunteered my programming skills for a social cause. It was cool to use my passion to do something good. I made a software tool for one charitable foundation which helped streamline their operations and make them run more smoothly. Seeing my skills making a real difference in the world was really rewarding.",
           "James: Hey John! Glad to hear from you. It's awesome that you used your skills to make a difference. Bet it was cool to see it in action. Would love to hear more about it!",
@@ -9899,6 +10066,7 @@
       },
       {
         "session_id": "conv-47_s12",
+        "session_date": "7:33 pm on 23 May, 2022",
         "turns": [
           "James: Hey John, last weekend I had an awesome time at the amusement park with my friends. It was a great break from the virtual world. I went on some awesome roller coasters and it reminded me of when I was a kid. Everything was so real and exciting; it felt like I was in a video game!",
           "John: Hey James! Sounds like an awesome time! I bet those rides brought back some great memories. Were there any other attractions besides the roller coaster?",
@@ -9918,6 +10086,7 @@
       },
       {
         "session_id": "conv-47_s13",
+        "session_date": "4:30 pm on 13 June, 2022",
         "turns": [
           "John: Hey James, long time no talk! A lot has happened during this time. Let me fill you in.",
           "James: Hey John! Awesome to hear from you. Yeah, a lot has happened. Let's catch up!",
@@ -9943,6 +10112,7 @@
       },
       {
         "session_id": "conv-47_s14",
+        "session_date": "5:07 pm on 16 June, 2022",
         "turns": [
           "James: Hey John, how's it going? A lot has happened for me lately, some good and some not so great. I`m lucky to have at least two people who always help me out when I'm struggling. What about you?",
           "John: Gad to hear you have your support system ready. It's crucial, especially during hard times. For me, it's been quite an emotional rollercoaster. Last week, I started my blog about coding. It's exciting and kinda scary too. This is the first picture I uploaded there.",
@@ -9982,6 +10152,7 @@
       },
       {
         "session_id": "conv-47_s15",
+        "session_date": "9:59 pm on 19 June, 2022",
         "turns": [
           "James: Hey John, since our last chat, something awesome happened. Last Friday, I started introducing Max, Daisy and the new pup Ned. It was hard at first, but they're slowly adapting. It's sweet to watch them bond and have fun together.",
           "John: Wow, that's cool, James! Seeing them bonding and having a great time is so sweet. Do you have a picture of them together?",
@@ -10006,6 +10177,7 @@
       },
       {
         "session_id": "conv-47_s16",
+        "session_date": "5:13 pm on 9 July, 2022",
         "turns": [
           "James: Hey John! Long time no talk - hope you're doing well. Guess what? Last week I actually won an online gaming tournament! It was such an exciting experience and it blew my mind when I won. Winning felt so good and it really motivated me to keep improving.",
           "John: Hey James! Congrats on winning the online gaming tournament! It's super fulfilling to see your hard work pay off. So happy for you!",
@@ -10027,6 +10199,7 @@
       },
       {
         "session_id": "conv-47_s17",
+        "session_date": "9:49 am on 22 July, 2022",
         "turns": [
           "John: Hi James! I just started playing chess to get better at strategy. I'm loving it! Have you ever tried it out?",
           "James: Hey John! Yeah, I've played chess before. It's a game that really tests your strategy. It's great that you're enjoying it!",
@@ -10069,6 +10242,7 @@
       },
       {
         "session_id": "conv-47_s18",
+        "session_date": "1:45 pm on 6 August, 2022",
         "turns": [
           "John: Hey James, good catching up! Been a while huh? I made a huge call - recently left my IT job after 3 years. It was tough but I wanted something that made a difference. And now with this new job, I am happy about my decision. I am loving the new job!",
           "James: Hey John! Great to hear from you. Leaving after 3 years is a big step - how did it feel?",
@@ -10094,6 +10268,7 @@
       },
       {
         "session_id": "conv-47_s19",
+        "session_date": "9:16 am on 10 August, 2022",
         "turns": [
           "John: Hey James, been a few days. The convo got me thinking about my passions and goals. Thanks for encouraging me to try new game genres.",
           "James: Hey John! Nice to hear from you! Glad our chat made an impact. What sort of games are you interested in exploring?",
@@ -10116,6 +10291,7 @@
       },
       {
         "session_id": "conv-47_s20",
+        "session_date": "3:57 pm on 21 August, 2022",
         "turns": [
           "John: Hey, James! Good to hear from you. I have some awesome news - I joined a programming group online last Friday and it's been incredible! It's awesome to be part of a community of people with similar goals - coding and making a difference.",
           "James: Hey John! That's great to hear! Being part of a coding community can definitely be rewarding. Can you share more about your experiences with the online group? Have you made any interesting connections?",
@@ -10143,6 +10319,7 @@
       },
       {
         "session_id": "conv-47_s21",
+        "session_date": "9:18 pm on 26 August, 2022",
         "turns": [
           "James: Hey John! Look how cute it is. My dog came to me today while I was playing on the console. What is new?",
           "John:  Your pup is so cute, remind me what's their name? I've been helping my younger siblings out with programming since they joined the programming course. It's really cool to see them get into it.",
@@ -10167,6 +10344,7 @@
       },
       {
         "session_id": "conv-47_s22",
+        "session_date": "6:53 pm on 1 September, 2022",
         "turns": [
           "James: Hey John! Been a while, but hope you're doing well. My Unity strategy game is finally finished—it took loads of time and effort, but I'm really proud. Your support and encouragement made a real difference. Thanks for believing in me!",
           "John: Hey James! Congrats on finishing your game! It looks amazing and I'm so proud of you for all the hard work you put in. Can I see more of it? Got any other screenshots to show me?",
@@ -10191,6 +10369,7 @@
       },
       {
         "session_id": "conv-47_s23",
+        "session_date": "9:23 pm on 4 September, 2022",
         "turns": [
           "James: Hey John, it's been a few days since we talked. So much has gone on, both good and bad. Yesterday, when we were at the theater, Samantha loves theater, I asked her to become my girlfriend, and she agreed. We have gone through a lot in this short period. There were good and bad, but I'm happy with her. All that ups and downs were a bit overwhelming, but it's part of life. What about you? Anything interesting lately?",
           "John: Hey James, this is great news! Where else have you been besides the theater? My parents just started learning coding from me - it's been a learning experience, but I'm glad to help them out. It binds us a little closer. Look at this photo, this is my father coding his own program for the first time.\n ",
@@ -10217,6 +10396,7 @@
       },
       {
         "session_id": "conv-47_s24",
+        "session_date": "6:02 pm on 18 September, 2022",
         "turns": [
           "John: Hey James! Long time no see! A lot's changed since we talked. I started getting into board games. I tried one last week and it turned out to be a lot of fun. What's new with you?",
           "James: Hey John! Cool, what kind of board game is this? I had a lot to do all this time. And in order not to forget to do something, I started writing down everything I needed in a notebook.",
@@ -10243,6 +10423,7 @@
       },
       {
         "session_id": "conv-47_s25",
+        "session_date": "8:56 pm on 20 September, 2022",
         "turns": [
           "John: Hey James, been a few days since we chatted. Lots of stuff goin' on in my life!",
           "James: Hey John! What new has happened in your life?",
@@ -10273,6 +10454,7 @@
       },
       {
         "session_id": "conv-47_s26",
+        "session_date": "9:20 am on 3 October, 2022",
         "turns": [
           "John: Hey James! Busy few weeks for sure, but I'm pushing through. Got an email about a volunteer gig at a game dev non-profit. It's something I've wanted to do for a while, and could be the perfect start to a career that combines my two loves - gaming and helping. So stoked!",
           "James: Hey John, that sounds awesome! Combining your two loves - gaming and helping people - must be really exciting! So what kind of gig did they offer you?",
@@ -10293,6 +10475,7 @@
       },
       {
         "session_id": "conv-47_s27",
+        "session_date": "2:14 pm on 13 October, 2022",
         "turns": [
           "John: Hey James! How's it going? I had a blast last week when my programmer friends and I organized an online comp. It was awesome to see everyone show off their skills! Anything new in your life?",
           "James: Hey John, congrats! Something cool happened to me recently. I made my first game and released it for the gaming community - it was so exciting!",
@@ -10312,6 +10495,7 @@
       },
       {
         "session_id": "conv-47_s28",
+        "session_date": "7:36 pm on 21 October, 2022",
         "turns": [
           "James: Hey John, long time no talk! So much has happened!",
           "John: Hey James! I'm excited to catch up. What's been up lately?",
@@ -10352,6 +10536,7 @@
       },
       {
         "session_id": "conv-47_s29",
+        "session_date": "12:37 am on 31 October, 2022",
         "turns": [
           "John: Hey James! Hope you're doing great. I've some amazing news - I held a gaming tourney with my buddies last night. We played Fortnite and a few other games. We raised a decent amount for a children's hospital. Combining gaming and a good cause felt awesome!",
           "James: Hey John! Awesome job organizing a gaming tournament for a children's hospital! Combining gaming and a good cause - that's really cool! Tell me more about who helped out and what other games were played.",
@@ -10373,6 +10558,7 @@
       },
       {
         "session_id": "conv-47_s30",
+        "session_date": "5:20 pm on 5 November, 2022",
         "turns": [
           "James: Hey John, hope you're doing well. Yesterday, we started on a road trip. It was fun spending time with the family and my dogs. Exploring new places and taking in nature with the furballs was awesome!",
           "John: Hey James! Wow, what an adventure! Lately, I've been busy with something. Guess what? I had a great accomplishment this Tuesday! It was awesome.",
@@ -10397,6 +10583,7 @@
       },
       {
         "session_id": "conv-47_s31",
+        "session_date": "8:57 pm on 7 November, 2022",
         "turns": [
           "James: Hey John! Guess what? Me and my family are currently on the road trip! We`ve already visited my friends Josh and Mark and had such a great time!",
           "John: Hey James! That sounds awesome! I had a super fun weekend - I worked with a game developer on a project and it was great to see my ideas come to life. It was an incredible experience! ",
@@ -11334,6 +11521,7 @@
     "sessions": [
       {
         "session_id": "conv-48_s1",
+        "session_date": "4:06 pm on 23 January, 2023",
         "turns": [
           "Deborah: Hey Jolene, nice to meet you! How's your week going? Anything fun happened?",
           "Jolene: Hi Deb! Good to meet you! Yeah, my week's been busy. I finished an electrical engineering project last week - took a lot of work, but it's done now. Anything fun happening for you?",
@@ -11357,6 +11545,7 @@
       },
       {
         "session_id": "conv-48_s2",
+        "session_date": "9:49 am on 27 January, 2023",
         "turns": [
           "Deborah: Hey Jolene, sorry to tell you this but my dad passed away two days ago. It's been really tough on us all - his sudden death left us all kinda shell-shocked. I'm trying to channel my grief by spending more time with family and cherishing the memories. These moments remind me to live life fully.",
           "Jolene: Sorry to hear about your dad, Deborah. Losing a parent is tough - how's it going for you and your family?",
@@ -11394,6 +11583,7 @@
       },
       {
         "session_id": "conv-48_s3",
+        "session_date": "7:03 pm on 1 February, 2023",
         "turns": [
           "Jolene: Hi Deb! How're you? I've been busy. My engineering professor gave us a huge robotics project. It's tough but fun, it's making me get creative and problem-solve.",
           "Deborah: Hey Jolene! It's great to hear from you. It sounds challenging but interesting! It must be really putting your creative and problem-solving skills to the test. How did you feel when you first received the project? Are you enjoying working on it?",
@@ -11414,6 +11604,7 @@
       },
       {
         "session_id": "conv-48_s4",
+        "session_date": "9:48 am on 4 February, 2023",
         "turns": [
           "Jolene: Hey Deborah! Good to hear from you. How've you been? I've been on an emotional rollercoaster lately, but I'm coping.",
           "Deborah: Hey Jolene! Good to hear from you. All good here - how about you? Anything new happening lately?",
@@ -11463,6 +11654,7 @@
       },
       {
         "session_id": "conv-48_s5",
+        "session_date": "9:03 pm on 9 February, 2023",
         "turns": [
           "Jolene: Hey Deborah! Been a few days since we last talked so I wanted to fill you in on something cool. Last Wednesday I did a mini retreat to assess where I'm at in life. It was a dope experience that totally gave me a new outlook.",
           "Deborah: Hey Jolene! Sounds great. Taking time to reflect can be really awesome. Did you gain any new insights from it?",
@@ -11485,6 +11677,7 @@
       },
       {
         "session_id": "conv-48_s6",
+        "session_date": "4:12 pm on 22 February, 2023",
         "turns": [
           "Jolene: Hey Deborah, totally buzzing! Had a great night out last night - dinner, and drinks with my friends. So glad I got to let my hair down. You?",
           "Deborah: Sounds great, Jolene! I just visited this place and it was so calming. Nostalgic too.",
@@ -11506,6 +11699,7 @@
       },
       {
         "session_id": "conv-48_s7",
+        "session_date": "4:50 pm on 25 February, 2023",
         "turns": [
           "Jolene: Hi Deborah, it's been a while! Since we last talked, so much has happened. Balancing engineering school with my partner's video games is quite a feat. But I'm also setting aside time for myself, doing yoga and meditation. It helps give me calm amidst the craziness.",
           "Deborah: Hey Jolene! Great to hear from you. Taking a break is key. How have those practices been helping with everything?",
@@ -11534,6 +11728,7 @@
       },
       {
         "session_id": "conv-48_s8",
+        "session_date": "7:18 pm on 2 March, 2023",
         "turns": [
           "Deborah: Hey Jolene, Anna got me a vegan stir-fry the other day - tofu and veg with ginger and soy sauce. It was really tasty! Food is such a wonderful source of pleasure and nourishment. What dishes are comforting to you?",
           "Jolene: One of my favorite dishes is lasagna! Comfort food can be a great pick-me-up. I've got a lot going on with my studies and exams.",
@@ -11562,6 +11757,7 @@
       },
       {
         "session_id": "conv-48_s9",
+        "session_date": "11:22 am on 13 March, 2023",
         "turns": [
           "Deborah: Hi Jolene! We haven't corresponded for a long time!",
           "Jolene: Hey Deb, yeah life can get chaotic. How's it been going lately?",
@@ -11587,6 +11783,7 @@
       },
       {
         "session_id": "conv-48_s10",
+        "session_date": "5:35 pm on 22 March, 2023",
         "turns": [
           "Deborah: Hey Jolene, it's been a while. Hope you're doing okay with all your exams and deadlines. I know it's difficult for you right now.",
           "Jolene: Hey Deb! Yeah, it can be tough. Trying to find time for everything is like playing catch-up - really stressful!",
@@ -11616,6 +11813,7 @@
       },
       {
         "session_id": "conv-48_s11",
+        "session_date": "4:03 pm on 28 March, 2023",
         "turns": [
           "Jolene: Hey Deb, long time no talk. A lot's happened! On Friday I had a breakthrough with my engineering project. Finally found a solution to a prob that's been bugging me. Feels great to see my hard work paying off.",
           "Deborah: You've really proven your skills. Feels great, right? Keep it up! And I bought new props for the yoga class! Here it is in action.",
@@ -11635,6 +11833,7 @@
       },
       {
         "session_id": "conv-48_s12",
+        "session_date": "4:30 pm on 9 April, 2023",
         "turns": [
           "Deborah: Hey Jolene! Great to see you! Had a blast biking nearby with my neighbor last week - was so freeing and beautiful. Checked out an art show with a friend today - really cool and inspiring stuff. Reminded me of my mom.",
           "Jolene: Hey Deborah! Sounds like you had a blast biking and at the art show. Your photo looks like you were really into it! Did it make you think profound thoughts?",
@@ -11656,6 +11855,7 @@
       },
       {
         "session_id": "conv-48_s13",
+        "session_date": "3:56 pm on 6 June, 2023",
         "turns": [
           "Jolene: Hey Deborah! Long time no talk - I had lots of stuff going on. Remember the tough engineering project? I finally wrapped that up last month. Look at the result!",
           "Deborah: Jolene! Congrats on wrapping up your with it! You really put in the work and it paid off. ",
@@ -11688,6 +11888,7 @@
       },
       {
         "session_id": "conv-48_s14",
+        "session_date": "9:17 am on 26 June, 2023",
         "turns": [
           "Deborah: Hey Jolene! How's it going? We haven't talked in a while. I've been busy getting ready for a yoga retreat with some buddies. A chance to hang out with people who think like me and find peace and understanding. Sounds awesome!",
           "Jolene: Hey Deb! Been super hectic with internship and stuff. That retreat sounds awesome, I could definitely use a break!",
@@ -11716,6 +11917,7 @@
       },
       {
         "session_id": "conv-48_s15",
+        "session_date": "7:37 pm on 9 July, 2023",
         "turns": [
           "Deborah: Hey Jolene! I started a running group with Anna - it's awesome connecting with people who care about fitness!",
           "Jolene: Cool, Deb! Glad you found some people to get fit with. I'm trying to add workouts into my studying schedule, which has been tough but fun. How about you? Any challenges with the running group?",
@@ -11760,6 +11962,7 @@
       },
       {
         "session_id": "conv-48_s16",
+        "session_date": "9:26 am on 1 August, 2023",
         "turns": [
           "Deborah: Hey Jolene! Great news - I just started a project for a cleanup in our community and have been trying to raise funds for it. It's been amazing to see everyone come together to make a difference. How've you been? Anything new going on?",
           "Jolene: Hey Debs! Congrats on your project for the community! As for me, life's been a rollercoaster lately. Last week, I had a huge setback with my project. I put in so much work and it all crashed and I lost everything. SO frustrating and depressing.",
@@ -11785,6 +11988,7 @@
       },
       {
         "session_id": "conv-48_s17",
+        "session_date": "8:50 pm on 12 August, 2023",
         "turns": [
           "Deborah: Since we last spoke, I made a meditation guide for my yoga retreat. How about you?",
           "Jolene: I have been stressed since I lost my work files. I was so overwhelmed...but meditation kept me chill and I got my clarity back, thank goodness. Really appreciate the practice!",
@@ -11805,6 +12009,7 @@
       },
       {
         "session_id": "conv-48_s18",
+        "session_date": "2:58 pm on 16 August, 2023",
         "turns": [
           "Jolene: Been thinking a lot about my plans lately, especially after checking in with my bf. It's been up and down!  Some days it feels like I'm trying to juggle my engineering, relationship, and growing as a person, and I just don't know how to handle it all. How do you manage when it's too much?",
           "Deborah: Finding ways to restore balance is important. Taking time for yourself and recognizing your needs can make a difference. ",
@@ -11825,6 +12030,7 @@
       },
       {
         "session_id": "conv-48_s19",
+        "session_date": "12:52 am on 19 August, 2023",
         "turns": [
           "Deborah: Hey Jolene! Hope you're having a good one. Last Friday I told Anna the story of my life and they were super kind about it. It was so nice to have a meaningful connection. How's the mindfulness workshops and reading going? Need any help?",
           "Jolene: Life's been hella busy since we last talked. I bought a console for my partner as a gift on the 17th and it's so much fun, he even managed to play it.! Engineering studies are still going strong too. Balance has been key for me lately. How about you? What's been up?",
@@ -11854,6 +12060,7 @@
       },
       {
         "session_id": "conv-48_s20",
+        "session_date": "9:11 am on 21 August, 2023",
         "turns": [
           "Jolene:  Long time no talk! We were given a new game for the console last week, it is Battlefield 1. What's been up with you?",
           "Deborah: Hey Jolene! Good to hear from you. That`s cool! Been thinking about a few big moments lately - went to a place that held a lot of memories for me. Sat on a bench where we used to chat and it brought back a lot of emotions. ",
@@ -11885,6 +12092,7 @@
       },
       {
         "session_id": "conv-48_s21",
+        "session_date": "9:34 am on 24 August, 2023",
         "turns": [
           "Deborah: Hey Jolene! Good to hear from you! A lot's happened since we talked - last week I got to go to this yoga retreat near my mom's place. It was so cool - I got to hang with nature and really get to know myself. Definitely life-changing! That's how beautiful it was there!",
           "Jolene: Wow, Deb, sounds great! Glad you got to connect with yourself and nature. That's my own way to relax. What are your thoughts on life now?",
@@ -11907,6 +12115,7 @@
       },
       {
         "session_id": "conv-48_s22",
+        "session_date": "5:33 pm on 26 August, 2023",
         "turns": [
           "Deborah: Hey Jolene, since we talked I've been thinking about my mom's influence. Remembering those we love is important.",
           "Jolene: I understand, Deb. Remembering and cherishing the memories of our loved ones is so important. It's comforting to know that their influence still guides us. Last Friday, my partner and I talked about how our loved ones have influenced us and what their values meant to us. It was an emotional chat, but it made us feel closer and showed us what really matters. ",
@@ -11942,6 +12151,7 @@
       },
       {
         "session_id": "conv-48_s23",
+        "session_date": "11:46 am on 30 August, 2023",
         "turns": [
           "Jolene: Hey Deborah, how's it going? Guess what? Yesterday my partner and I got back from an awesome trip to Rio de Janeiro- we checked out some cool yoga classes.",
           "Deborah: That yoga pose looks great. Must've been a cool experience for the two of you. What did the trip teach you?",
@@ -11979,6 +12189,7 @@
       },
       {
         "session_id": "conv-48_s24",
+        "session_date": "2:14 pm on 3 September, 2023",
         "turns": [
           "Deborah: Hey Jolene, just catching up. I went to a cool event last week with the aim to support each other - pretty inspiring. Have you been connecting with anyone lately?",
           "Jolene: Hey Deb, great to hear from you! I've been focusing on studying and my relationship with my partner. We're taking little trips to the beach, it's a great way to relax. How about you, anything new going on?",
@@ -11999,6 +12210,7 @@
       },
       {
         "session_id": "conv-48_s25",
+        "session_date": "8:31 pm on 6 September, 2023",
         "turns": [
           "Jolene: Woohoo! I signed up for a meditation course at a retreat near a lake. Can't wait to share this experience with my partner and learn some new techniques. Sooo excited!",
           "Deborah: That`s awesome! It looks so calm in the pic - I hope you enjoy your experience and learn some new techniques!",
@@ -12024,6 +12236,7 @@
       },
       {
         "session_id": "conv-48_s26",
+        "session_date": "7:39 pm on 8 September, 2023",
         "turns": [
           "Deborah: Hey Jolene, had a tough week. Storm forced us to cancel our yoga getaway.",
           "Jolene: Sorry to hear about it. How are you feeling now?",
@@ -12050,6 +12263,7 @@
       },
       {
         "session_id": "conv-48_s27",
+        "session_date": "2:18 pm on 12 September, 2023",
         "turns": [
           "Jolene: Hey Deb! So sorry for the late reply, been super busy. Last weekend my partner and I traveled to a meditation retreat for a few weeks in Phuket. Amazing experience! Nature, reflection and a break from engineering studies were awesome - it helped me find inner peace.",
           "Deborah:  I'd love to hear more about your reflections there and how they changed you.",
@@ -12068,6 +12282,7 @@
       },
       {
         "session_id": "conv-48_s28",
+        "session_date": "3:09 pm on 15 September, 2023",
         "turns": [
           "Deborah: Since speaking last, I reconnected with my mom's old friends. Their stories made me tear up and reminded me how lucky I am to have had her.",
           "Jolene:  It's great that you could reconnect with them. Hearing stories about our loved ones can be tough but also comforting.",
@@ -12103,6 +12318,7 @@
       },
       {
         "session_id": "conv-48_s29",
+        "session_date": "1:24 pm on 17 September, 2023",
         "turns": [
           "Deborah: Hey Jolene, I'm so excited to tell you! Yesterday, me and my neighbor ran a free gardening class for the community, it was awesome! People of any age joined in and it was such a great thing to see.",
           "Jolene: Wow, Deborah, that's awesome! Keep up the great work, and here's hoping for more events like this in the future!",
@@ -12142,6 +12358,7 @@
       },
       {
         "session_id": "conv-48_s30",
+        "session_date": "10:17 am on 20 September, 2023",
         "turns": [
           "Deborah: I had a great time at the music festival with my pals! The vibes were unreal and the music was magical. It was so freeing to dance and bop around. Music brings us together and helps us show our feelings. It reminds me of my mom and her soothing voice when she'd sing lullabies to me. Lucky to have those memories!",
           "Jolene: Wow, festivals sound so fun! Here's me and my partner at one last year - had an awesome time! It's my way of expressing myself and getting away from all the stress of everyday life. Just got back from a trip with my partner - so cool!",
@@ -13318,6 +13535,7 @@
     "sessions": [
       {
         "session_id": "conv-49_s1",
+        "session_date": "1:47 pm on 18 May, 2023",
         "turns": [
           "Sam: Hey Evan, good to see you! What's new since we last met? Anything cool happening?",
           "Evan: Hey Sam! Good to see you! Yeah, I just got back from a trip with my family in my new Prius.",
@@ -13345,6 +13563,7 @@
       },
       {
         "session_id": "conv-49_s2",
+        "session_date": "7:11 pm on 24 May, 2023",
         "turns": [
           "Evan: Hey Sam, good to hear from you! Since we last talked, lots has been happening! Last weekend, I took my family on a road trip to Jasper. It was amazing! We drove through the Icefields Parkway and the glaciers and lakes were gorgeous. I got a shot of a glacier, check it out!",
           "Sam: Hey Evan, looks amazing! I've never been to Jasper, but it looks breathtaking. Tell me more about your road trip. Was it relaxing?",
@@ -13367,6 +13586,7 @@
       },
       {
         "session_id": "conv-49_s3",
+        "session_date": "3:55 pm on 6 June, 2023",
         "turns": [
           "Evan: Hey Sam! Long time no talk! How're you doing? Life's been quite the rollercoaster lately. I had a health scare last week – a sudden heart palpitation incident that really shook me up. It's been a serious wake-up call about my lifestyle.",
           "Sam: Hey Evan, great hearing from you! Sorry about that, glad you're feeling better now. Trying to eat healthier these days.",
@@ -13390,6 +13610,7 @@
       },
       {
         "session_id": "conv-49_s4",
+        "session_date": "10:52 am on 27 July, 2023",
         "turns": [
           "Sam: Hey Evan, I need to talk to you. My friends were mocking my weight last Friday and it hurt. That made me realize I need to make changes.",
           "Evan: Hey Sam, sorry about that. Don't worry, progress takes time. Let's work on it together.",
@@ -13415,6 +13636,7 @@
       },
       {
         "session_id": "conv-49_s5",
+        "session_date": "7:52 pm on 7 August, 2023",
         "turns": [
           "Evan: Hey Sam, how's it going? Last week I went on a trip to Canada and something unreal happened - I met this awesome Canadian woman and it was like something out of a movie. She's incredible and being with her makes me feel alive.",
           "Sam: Congrats Evan! She must be something special! Being with someone who makes you feel alive is amazing. I'm sorry to hear that you're dealing with health issues lately, it can be really tough. It's hard to fully enjoy things sometimes.",
@@ -13445,6 +13667,7 @@
       },
       {
         "session_id": "conv-49_s6",
+        "session_date": "4:09 pm on 13 August, 2023",
         "turns": [
           "Evan: Hey Sam, long time no talk! Hope you're doing great. I just got back from a rad vacay with my new SO in Canada. Tried some awesome activities too - think hiking, biking... all that cool stuff. We loved exploring the outdoors together, it was so awesome!",
           "Sam: Hey Evan! Good to hear from you. Wow, Canada sounds amazing! That photo looks stunning. Wish I could do something like that. Things have been a bit challenging for me lately; some stuff has been hard on my health.",
@@ -13469,6 +13692,7 @@
       },
       {
         "session_id": "conv-49_s7",
+        "session_date": "4:20 pm on 15 August, 2023",
         "turns": [
           "Evan: Hey Sam, what's up? It's been a few days since we talked. How have you been? Life's been tough lately - my son had a soccer accident last Saturday and hurt his ankle, it was tough seeing him hurt! I just been looking after him and taking him to the doctor. As a dad, it's hard to watch your kid go through something like that.",
           "Sam: Hey Evan, sorry to hear about what happened. I can imagine how hard it must have been for you. Things haven't been easy for me either. Had a tough week and a doc's appointment, so it was kinda like a wake-up call to take better care of myself. On a bright side, I'm taking a cooking class to learn how to make healthier meals.",
@@ -13490,6 +13714,7 @@
       },
       {
         "session_id": "conv-49_s8",
+        "session_date": "6:17 pm on 19 August, 2023",
         "turns": [
           "Sam: Hey Evan, some big news: I'm on a diet and living healthier! Been tough, but I'm determined.",
           "Evan: Wow, Sam, that's great news! Making changes to live healthier can be challenging, how has it been going?",
@@ -13528,6 +13753,7 @@
       },
       {
         "session_id": "conv-49_s9",
+        "session_date": "10:18 am on 27 August, 2023",
         "turns": [
           "Sam: Hey Evan! Exciting news: I started a new diet and exercise routine last Monday and it's made a huge difference. I feel great! What about you, what changes have you made recently?",
           "Evan: Wow, Sam, great! Glad your new diet/exercise is going well. As for me, I've hit a sore spot lately. Twisted my knee last Friday and it's really painful, so it's been tough to stay consistent with my usual fitness routine. It's really frustrating because staying active is like, mega-important to me.",
@@ -13552,6 +13778,7 @@
       },
       {
         "session_id": "conv-49_s10",
+        "session_date": "9:28 am on 11 September, 2023",
         "turns": [
           "Evan: Hey Sam! Long time no talk! Hope all is good. What have I been doing these past few weeks?",
           "Sam: Hey Evan! Nice to hear from you. Life has been an up and down ride. Have you seen the pic I posted of my before and after body as a result of the diet? Working to motivate others to make better choices.",
@@ -13571,6 +13798,7 @@
       },
       {
         "session_id": "conv-49_s11",
+        "session_date": "8:57 pm on 6 October, 2023",
         "turns": [
           "Sam: Hey Evan, long time no see! I've started eating healthier - what's new with you? Picked up any new hobbies?",
           "Evan: Hey Sam! That's awesome about your healthier eating! For me, I had a setback last week - messed up my knee playing b-ball with the kids. It's been tough to stay active since. I really miss going on adventures like we did last year - good times with the family!",
@@ -13596,6 +13824,7 @@
       },
       {
         "session_id": "conv-49_s12",
+        "session_date": "3:09 pm on 8 October, 2023",
         "turns": [
           "Sam: Hey Evan, hope you're doing okay. I wanted to chat about something that's been bothering me lately... I went for a check-up Monday and my doc said my weight's a serious health risk - if I don't make changes soon, it can get worse. I know I made jokes about it, but it's really hitting me. Been having a hard time.",
           "Evan: Hey Sam, tough news. Yeah, our health can really put a damper on things. I started lifting weights one year ago and it's been a journey. It was a struggle at first, but I'm seeing some gains. You interested in trying it out?",
@@ -13618,6 +13847,7 @@
       },
       {
         "session_id": "conv-49_s13",
+        "session_date": "4:07 pm on 14 October, 2023",
         "turns": [
           "Evan: Hey Sam, how's it going? Been a while since we talked. Hope all is good.",
           "Sam: Hey Evan! It's been a rough week - I gave in and bought some unhealthy snacks. I feel kinda guilty. How's it going for you? That painting is awesome! Did you paint it?",
@@ -13639,6 +13869,7 @@
       },
       {
         "session_id": "conv-49_s14",
+        "session_date": "1:50 pm on 17 October, 2023",
         "turns": [
           "Sam: Hey Evan! I've been missing our chats. I had quite the health scare last weekend - ended up in the ER with a severe stomachache. Turns out, it was gastritis, which was pretty alarming. It was a wake-up call for me to start prioritizing my health, like adopting a more nutritious diet and getting regular exercise. On top of that, my phone's been giving me a hard time, adding to the stress.",
           "Evan: Hey Sam, sorry to hear about that. Gastritis can be tough. Taking care of ourselves is important. BTW, I've been focusing on fitness and it's been really beneficial for my overall well-being. Funny thing, I had another encounter with a lost tourist recently. Seems like helping tourists is becoming a recurring theme in my life!",
@@ -13660,6 +13891,7 @@
       },
       {
         "session_id": "conv-49_s15",
+        "session_date": "2:56 pm on 25 October, 2023",
         "turns": [
           "Sam: Morning, Evan. I've been trying to keep up with my new health routine, but it's tough. My family's really pushing for it, and I feel so pressured.",
           "Evan: I hear you, Sam. It's important to have people who encourage you, but not stress you out. By the way, I just got back from my morning walk. It really helps to start the day actively.",
@@ -13683,6 +13915,7 @@
       },
       {
         "session_id": "conv-49_s16",
+        "session_date": "9:13 pm on 9 November, 2023",
         "turns": [
           "Sam: Hey Evan! Hope you're doing good. Got some good news to share - I'm a Weight Watchers coach in my group now! It's a pretty big accomplishment for me, feel really proud.",
           "Evan: Congrats Sam! That's awesome! I'm super proud of you. Becoming a Weight Watchers coach is a big deal. Keep going!",
@@ -13712,6 +13945,7 @@
       },
       {
         "session_id": "conv-49_s17",
+        "session_date": "7:30 pm on 21 November, 2023",
         "turns": [
           "Sam: Hey Ev! Long time no chat. How's it going? Hope all is well.",
           "Evan: Hey Sam, good to hear from you! Life's been a wild ride lately. Last week, I had a health scare and had to go to the hospital. They found something suspicious during a check-up, which freaked me out. Thankfully, it was all a misunderstanding, but it made me realize how important it is to keep an eye on my health. How've you been?",
@@ -13745,6 +13979,7 @@
       },
       {
         "session_id": "conv-49_s18",
+        "session_date": "8:16 pm on 5 December, 2023",
         "turns": [
           "Evan: Hey Sam, good to hear from you. I've hit a bit of a snag - my new Prius, the one I just bought, broke down. It's a bit of a stressor since I rely on it for my active lifestyle and road trips. It's frustrating when new things go awry so soon.",
           "Sam: Hey Evan, that's rough. Dealing with a new car breaking down is such a hassle, especially when it's your main mode of transport.",
@@ -13765,6 +14000,7 @@
       },
       {
         "session_id": "conv-49_s19",
+        "session_date": "1:45 pm on 9 December, 2023",
         "turns": [
           "Evan: Hey Sam, hope you're doing good. Wanted to share some amazing news - my partner is pregnant! We're so excited! It's been a while since we had a kiddo around.",
           "Sam: Congrats, Ev! That's great news! Parenthood is so amazing. How are you feeling about it?",
@@ -13785,6 +14021,7 @@
       },
       {
         "session_id": "conv-49_s20",
+        "session_date": "6:48 pm on 17 December, 2023",
         "turns": [
           "Evan: Hey Sam, what's up? Long time no see, huh? Lots has happened.",
           "Sam: Hey Evan! Long time no see. I'm doing okay, been through a few bumps. How about you?",
@@ -13807,6 +14044,7 @@
       },
       {
         "session_id": "conv-49_s21",
+        "session_date": "4:25 pm on 26 December, 2023",
         "turns": [
           "Sam: Hey Evan! Long time no see, how's it going?",
           "Evan: Hey Sam! Long time no see! Been up and down lately, got married last week - how about you?",
@@ -13834,6 +14072,7 @@
       },
       {
         "session_id": "conv-49_s22",
+        "session_date": "11:00 am on 31 December, 2023",
         "turns": [
           "Sam: Hey Evan! I’m really getting into this healthier lifestyle—just took my friends on an epic hiking trip last Friday!",
           "Evan: Hey Sam! That’s fantastic—nothing like a good hike to feel alive. We took the Prius for a long drive to the mountains last weekend. It was perfect until we got into a little scrape on the way back.",
@@ -13860,6 +14099,7 @@
       },
       {
         "session_id": "conv-49_s23",
+        "session_date": "1:32 pm on 6 January, 2024",
         "turns": [
           "Evan: Hey Sam, guess what? My partner and I told our extended fam about our marriage yesterday – it was so special! We've been totally overwhelmed by all their love and support.",
           "Sam: Congrats on the news, Evan! You two look so happy in the pic. These moments make life so wonderful; super stoked for you!",
@@ -13898,6 +14138,7 @@
       },
       {
         "session_id": "conv-49_s24",
+        "session_date": "12:17 am on 10 January, 2024",
         "turns": [
           "Evan: Hey Sam, hope you're doing good. Something funny happened last night.",
           "Sam: Hey Evan, what's up? What happened? Let me know.",
@@ -13927,6 +14168,7 @@
       },
       {
         "session_id": "conv-49_s25",
+        "session_date": "9:37 pm on 11 January, 2024",
         "turns": [
           "Sam: Hey Evan, been a few days since we last chatted. Hope you're doing OK. A lot's happened since then. Got issues with my health, it's been rough. Feels like this weight's keeping me from fully living. Trying to stay positive, not easy.",
           "Evan: Hey Sam, sorry to hear about your health. It's tough when it gets in the way of life. You're being positive, but remember to take care of yourself too. By the way, I had to apologize to my partner for that drunken night, it was pretty embarrassing.",
@@ -14895,6 +15137,7 @@
     "sessions": [
       {
         "session_id": "conv-50_s1",
+        "session_date": "11:53 am on 23 March, 2023",
         "turns": [
           "Calvin: Hey Dave! Nice to meet you! How's it going since we talked?",
           "Dave: Hey Calvin! Nice to meet you too! Things have been going well since we last talked. I attended this awesome event recently. It was like a car lover's paradise! They had so many classic cars on show, I was in awe. I even had the opportunity to speak with some of the owners and hear their fascinating stories. It was super inspiring. What about you? Anything exciting happening in your life lately?",
@@ -14919,6 +15162,7 @@
       },
       {
         "session_id": "conv-50_s2",
+        "session_date": "4:45 pm on 26 March, 2023",
         "turns": [
           "Calvin: Hey Dave, been a few days, so I wanted to let you in on some cool news.  I just got a new car and it's amazing! Finally owning a luxury car was a dream come true and I'm so stoked.",
           "Dave: Woohoo, Calvin! Congrats on the new car! How's it driving?",
@@ -14945,6 +15189,7 @@
       },
       {
         "session_id": "conv-50_s3",
+        "session_date": "4:15 pm on 20 April, 2023",
         "turns": [
           "Calvin: Hey Dave! Long time no see. I just went to an awesome music thingy in Tokyo - so cool!",
           "Dave: Hey Calvin! Great to hear from you. How was the music thingy in Tokyo? See any cool bands?",
@@ -14968,6 +15213,7 @@
       },
       {
         "session_id": "conv-50_s4",
+        "session_date": "6:24 pm on 1 May, 2023",
         "turns": [
           "Dave: Hey Calvin, long time no see! A lot's been happening since we last talked. Guess what? I finally opened my own car maintenance shop! It's so satisfying to have a spot to work on cars - it's like a dream come true! Take a look at the photo.",
           "Calvin: Wow Dave! Congrats on opening your own car maintenance shop! It looks like all your hard work and dedication paid off.",
@@ -15001,6 +15247,7 @@
       },
       {
         "session_id": "conv-50_s5",
+        "session_date": "1:16 pm on 3 May, 2023",
         "turns": [
           "Dave: Hey Calvin! Long time no talk. How's it going? Crazy news - I'm teaming up with a local garage. Take a look at what we working on together!",
           "Calvin: Hey Dave, great to hear from you! That's awesome news about teaming up with a local garage. Super inspiring seeing you follow your passion. Congratulations on this new venture. It's impressive how far you've come since we last chatted. How's everything going?",
@@ -15021,6 +15268,7 @@
       },
       {
         "session_id": "conv-50_s6",
+        "session_date": "11:50 am on 16 May, 2023",
         "turns": [
           "Calvin: Hey Dave! Long time no chat! Lots has gone down since we last caught up.",
           "Dave: Hey Calvin! Long time no chat! How's everything been going since we last caught up?",
@@ -15044,6 +15292,7 @@
       },
       {
         "session_id": "conv-50_s7",
+        "session_date": "6:06 pm on 31 May, 2023",
         "turns": [
           "Calvin: Hey Dave! Been ages since we chatted. So much has gone down. Touring with Frank Ocean last week was wild. Tokyo was unreal -- the crowd was insane. I felt so alive when performing, can't find the words to express it.",
           "Dave: Wow, that's awesome, Cal! I bet it was an incredible experience. Congrats! Look what I've been up to recently, that's my neighbor's car. He's been having some trouble with the engine, but now it's done by myself!",
@@ -15068,6 +15317,7 @@
       },
       {
         "session_id": "conv-50_s8",
+        "session_date": "2:31 pm on 9 June, 2023",
         "turns": [
           "Calvin: Hey Dave! Met with the creative team for my album yesterday. It was a long session, but awesome to see everything coming together. ",
           "Dave: Hey Cal! Sounds great that your album's coming along. Are you feeling good about it? Here's a pic I just took.",
@@ -15087,6 +15337,7 @@
       },
       {
         "session_id": "conv-50_s9",
+        "session_date": "3:15 pm on 21 June, 2023",
         "turns": [
           "Calvin: Hi Dave! Nice to hear from you. Since last chat, some things have happened. I had a lil car accident last Friday, kinda upsetting but no one was hurt. I've been dealing with insurance and repairs - taking up a lot of time and energy. Look at this photo!",
           "Dave: Sorry to hear about the car accident, Calvin. I'm glad to hear that nobody was hurt. Dealing with insurance and repairs can definitely be time-consuming and draining. Have you encountered any issues in the insurance process so far?",
@@ -15113,6 +15364,7 @@
       },
       {
         "session_id": "conv-50_s10",
+        "session_date": "7:56 pm on 7 July, 2023",
         "turns": [
           "Dave: Hey Calvin, how's the car doing after the crash? You were stoked to get back on the road, right?",
           "Calvin: Hey Dave! Thanks for checking in. It's all good now, the car's fixed and going strong. Nothing better than cruising around - it's the best! Look at how my car looks right now. How've you been? Anything new?",
@@ -15135,6 +15387,7 @@
       },
       {
         "session_id": "conv-50_s11",
+        "session_date": "6:38 pm on 21 July, 2023",
         "turns": [
           "Dave: Hey Cal, been ages since we spoke! Guess what? I just got back from a road trip with my friends - we saw some stunning countryside. It was such a lovely break from the corporate mayhem. Driving on those winding roads, taking in the views, and chatting with my friends recharged me totally - reminds me why I love cars so much. What did you end up doing?",
           "Calvin: Hey Dave! Great hearing from you! Wow, a road trip sounds awesome. I bet it felt great to get away from work and relax on those twisty roads. Recharging with your passion is awesome!",
@@ -15154,6 +15407,7 @@
       },
       {
         "session_id": "conv-50_s12",
+        "session_date": "1:12 pm on 3 August, 2023",
         "turns": [
           "Calvin: Hey Dave, long time no see! I just took my Ferrari for a service and it was so stressful. I'm kinda attached to it. Can you relate? What kind of hobbies give you a feeling of being restored?",
           "Dave: Hey Calvin, I understand the stress of getting a car serviced. Fixing cars is like therapy for me. Growing up working on cars with my dad, refurbishing them gives me a sense of fulfillment.",
@@ -15176,6 +15430,7 @@
       },
       {
         "session_id": "conv-50_s13",
+        "session_date": "5:22 pm on 11 August, 2023",
         "turns": [
           "Dave: Hey Calvin, been ages! Guess what? I got picked for a car mod workshop. Gonna get better at it and learn something new! Look at the cars I'm working with right now. ",
           "Calvin: Wow Dave, that's awesome! Congrats on being picked for the car mod workshop. It's a great opportunity to take your skills up a notch. Are there any mods or projects you're excited to work on?",
@@ -15200,6 +15455,7 @@
       },
       {
         "session_id": "conv-50_s14",
+        "session_date": "12:35 am on 14 August, 2023",
         "turns": [
           "Dave: Hey Cal, how's it going? Something cool happened since last we talked - I got to go to a car workshop in San Francisco! So cool to dive into the world of car restoration and see all the different techniques. People were really passionate and dedicated - truly inspiring!",
           "Calvin: Hey Dave! That's awesome! Car workshops sound totally cool and inspiring. Glad you found something that really gets you going.",
@@ -15221,6 +15477,7 @@
       },
       {
         "session_id": "conv-50_s15",
+        "session_date": "11:06 am on 22 August, 2023",
         "turns": [
           "Dave: Hey Calvin! Haven't talked in a while! Last Friday I had a card-night with my friends, it was so much fun. We laughed and had a great time! Take a look at the photo!",
           "Calvin: Hey Dave! Great to hear from you, card night sounds like a blast! Always love having fun with friends. Guess what? I scored a deal to continue collaboration with Frank Ocean! This is a dream come true for me, I've been working hard and it's finally paying off. No words can describe how happy I am.",
@@ -15241,6 +15498,7 @@
       },
       {
         "session_id": "conv-50_s16",
+        "session_date": "2:55 pm on 31 August, 2023",
         "turns": [
           "Dave: Hey Calvin! Long time no chat! How was the end of your tour? I bet it was amazing!",
           "Calvin: Hey Dave! The tour was amazing! I was so pumped from all the energy from the audience. This pic totally captures how I felt. Such an amazing time!",
@@ -15271,6 +15529,7 @@
       },
       {
         "session_id": "conv-50_s17",
+        "session_date": "9:19 am on 2 September, 2023",
         "turns": [
           "Dave: Hey Calvin! Been a while, what's up? I'm tied up with car stuff lately, yesterday I came back from San Francsico with some great insights and knowledge on car modification that I want to share with you! Changing things around, and giving an old car a new life - so satisfying!",
           "Calvin: Hey Dave! Nice to hear from you. That's cool! I totally understand the satisfaction you get from fixing cars. It's like you're giving them new life.",
@@ -15286,6 +15545,7 @@
       },
       {
         "session_id": "conv-50_s18",
+        "session_date": "10:56 am on 13 September, 2023",
         "turns": [
           "Calvin: Hey Dave! Sorry it took me so long to get back to you. Crazy times since we talked! My album finally dropped on the 11th and it was a wild feeling. Everyone's been loving it and it's motivated me to keep going.",
           "Dave: Hey Calvin! Congrats on your album release - that's awesome! Has it been overwhelming or inspiring?",
@@ -15307,6 +15567,7 @@
       },
       {
         "session_id": "conv-50_s19",
+        "session_date": "12:13 am on 15 September, 2023",
         "turns": [
           "Dave: Hey Calvin! Long time no talk! Got some cool news to share - last night was a blast! My band and I were jamming and the music just kept flowing. We had so much fun rehearsing! Also, last weekend, I had the opportunity to attend a rock concert here in Boston. Just take a look at what an amazing atmosphere it was!",
           "Calvin: Hey Dave! That's awesome! When everything just clicks during a jam session, it's such a great feeling. Do you happen to have any recordings of those sessions? That sounds fantastic! Rock concerts always have such an electrifying atmosphere! ",
@@ -15324,6 +15585,7 @@
       },
       {
         "session_id": "conv-50_s20",
+        "session_date": "8:57 pm on 22 September, 2023",
         "turns": [
           "Dave: Hey Calvin, good to catch up again! Had a tough time with my car project. Worked on the engine of the vintage Mustang, thought I'd fixed it, but when I started it up, heard a weird noise. So disappointing after putting so much work in. Take a look at the engine!",
           "Calvin: Hey Dave, sorry to hear about the car trouble. That must be disappointing after putting so much work into it. Yeah, fixing cars can be tricky. But hey, check out this pic! It's a sign of my hard work and dedication. Looking at it reminds me how far I've come.",
@@ -15346,6 +15608,7 @@
       },
       {
         "session_id": "conv-50_s21",
+        "session_date": "2:44 pm on 4 October, 2023",
         "turns": [
           "Calvin: Hey Dave! Yesterday I met with some incredible artists in Boston and we talked about working together. It was such an inspiring and exciting experience - they all have individual styles and I'm stoked to collaborate with them on new music.",
           "Dave: Awesome, Calvin! Connecting with all those talented artists must have been an inspiring experience. Can't wait to hear what you come up with in your collaboration. Let me know how it goes! Also, how did you arrange that meeting?",
@@ -15369,6 +15632,7 @@
       },
       {
         "session_id": "conv-50_s22",
+        "session_date": "3:13 pm on 8 October, 2023",
         "turns": [
           "Dave: Hey Calvin! What’s up? Last Friday I went to the car show. I saw some awesome cars and got to mess with car mods! There were so many cool machines around, it was so much fun! Take a look at this beautiful car!",
           "Calvin: Hey Dave, that sounds awesome! I'm into the rush of awesome cars. Can't wait to check out your garage.",
@@ -15388,6 +15652,7 @@
       },
       {
         "session_id": "conv-50_s23",
+        "session_date": "9:39 am on 15 October, 2023",
         "turns": [
           "Dave: Hey Cal, miss ya! Crazy rollercoaster week. A competing car maintenance shop snagged a deal we were trying to secure for months and it made me feel kinda bummed out. You know, I put in so much effort at work, but it feels like nothing. Am I wasting my time?",
           "Calvin: Hey Dave, sorry to hear that. It can be discouraging when you feel like your hard work goes unnoticed. But don't give up, keep pushing and believe in yourself. The payoff will be worth it.",
@@ -15411,6 +15676,7 @@
       },
       {
         "session_id": "conv-50_s24",
+        "session_date": "10:11 am on 19 October, 2023",
         "turns": [
           "Calvin: Hey Dave! Been a few days since we talked, but lots happened. Started touring with Frank Ocean and it's been amazing - so much energy from the crowd, such a connection when I'm on stage - unreal! Take a look at how I performed on stage, that was awesome!",
           "Dave: Congrats, Calvin! That's awesome. Being able to play your music to a crowd and feel that connection must be unreal. How's the tour going?",
@@ -15439,6 +15705,7 @@
       },
       {
         "session_id": "conv-50_s25",
+        "session_date": "2:17 pm on 23 October, 2023",
         "turns": [
           "Dave: Hey Calvin, how's the tour with Frank Ocean? I was pondering our chat the other day about fame and its impact on relationships. It must be awesome but it must have its own struggles too. How are you juggling your job plus your personal life?",
           "Calvin: The tour's been incredible! Performing and connecting with the crowd has been so energizing. Yeah, fame has its own challenges. It's been tough trying to balance everything.",
@@ -15475,6 +15742,7 @@
       },
       {
         "session_id": "conv-50_s26",
+        "session_date": "8:25 pm on 25 October, 2023",
         "turns": [
           "Calvin: Hey Dave! Long time no talk! I had a great time yesterday, and visited some sights in Boston with a high school friend. It was really fun and eye-opening.",
           "Dave: Hey Calvin! Good to hear from you! Sounds like you had a blast in Boston - so much to do there! One of my favorites there is great for chilling and admiring nature. BTW, something cool I wanted to tell you about - I recently attended a conference in Detroit - it was so cool, I learned a lot.",
@@ -15495,6 +15763,7 @@
       },
       {
         "session_id": "conv-50_s27",
+        "session_date": "10:49 am on 29 October, 2023",
         "turns": [
           "Calvin: Hey Dave! Since we last talked, I went to a networking event to meet more artists. So cool! The people I met will help me build up my fan base. Super excited about what it could lead to. You? Anything new since we last spoke?",
           "Dave: Hey Calvin! That's cool that you've been networking with other artists. Nice! I've been getting into photography recently. I've seen some amazing places and taken some great shots. Would you like to see them?",
@@ -15513,6 +15782,7 @@
       },
       {
         "session_id": "conv-50_s28",
+        "session_date": "5:46 pm on 2 November, 2023",
         "turns": [
           "Calvin: Hey Dave! It's been a while! Crazy stuff has been happening. Last week I threw a small party at my Japanese house for my new album. It was amazing, so much love from my fam and friends! Take a look at the photo of the party in the mansion, it was so energizing!",
           "Dave: Congrats on your album release and the party, Calvin! Must've been a great feeling having your loved ones show their support.",
@@ -15561,6 +15831,7 @@
       },
       {
         "session_id": "conv-50_s29",
+        "session_date": "9:15 pm on 13 November, 2023",
         "turns": [
           "Calvin: Hey Dave, I invited my old high school buddy to see me perform in Boston! It was insane. It got me thinking about how far I've come and reminded me how important relationships are in this biz. Felt so good!",
           "Dave: Whoa, that's great Calvin! Seeing your old friend must have brought back so many memories. It's awesome to have someone who's been there since the start to support us.",
@@ -15584,6 +15855,7 @@
       },
       {
         "session_id": "conv-50_s30",
+        "session_date": "10:54 am on 17 November, 2023",
         "turns": [
           "Dave: Hey Calvin, long time no talk! A lot has happened. I've taken up photography and it's been great - been taking pics of the scenery around here which is really cool.",
           "Calvin: Hey Dave, it's great to hear from you! Can't wait to see your pics. I went to a fancy gala in Boston yesterday and met some interesting people. Check out this pic of me and the crew!",

@@ -229,7 +229,7 @@ into a single semantic knowledge statement.
 
 Rules:
 1. Produce a knowledge statement, not a conversation summary.
-2. Strip conversational context and session-specific details.
+2. Strip conversational filler but KEEP all factual content.
 3. Preserve important conditions (e.g., "prefers X for Y context").
 
 Respond in JSON:

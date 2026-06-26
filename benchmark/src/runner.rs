@@ -1,16 +1,66 @@
 use anyhow::Result;
+use futures::stream::{self, StreamExt};
 use mneme_api::{MnemeMemory, MnemeSummary};
 use mneme_consolidate::{AnthropicLLM, ConsolidationEngine, ConsolidationLLM, OpenAILLM};
 use mneme_core::{MemoryQuery, MnemeConfig};
 use mneme_embed::{backends::OpenAIEmbeddingModel, EmbeddingModel};
 use mneme_store::{EnvelopeIndex, InMemoryContentStore, InMemoryEnvelopeIndex, MnemeStore};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::Semaphore;
 use tracing::{info, warn};
+use uuid::Uuid;
+
+/// Max concurrent per-question API calls (recall + rerank + generate + judge).
+/// Kept low enough to avoid gpt-4o rate limits (~10k RPM on tier-1).
+const QUESTION_CONCURRENCY: usize = 8;
 
 use crate::datasets::{LoCoMoConversation, LongMemEvalItem};
 use crate::judge::LLMJudge;
 use crate::metrics::{self, QuestionResult};
+
+/// Decompose question into sub-queries, recall for each in parallel, merge and deduplicate.
+/// Falls back to single-query recall if decomposition fails or returns one item.
+async fn recall_multihop(
+    session: &Session,
+    embed: &OpenAIEmbeddingModel,
+    judge: &LLMJudge,
+    question: &str,
+    top_k: usize,
+) -> Vec<MnemeSummary> {
+    let sub_qs = match judge.decompose_question(question).await {
+        Ok(qs) => qs,
+        Err(e) => {
+            warn!("decompose failed: {e}");
+            vec![question.to_string()]
+        }
+    };
+
+    if sub_qs.len() <= 1 {
+        return recall_with_fallback(session, embed, question, top_k).await;
+    }
+
+    // Recall for each sub-query in parallel, then merge deduped by id
+    let per_sub = top_k.max(3);
+    let mut all: Vec<MnemeSummary> = stream::iter(sub_qs.iter())
+        .map(|sq| async move { recall_with_fallback(session, embed, sq, per_sub).await })
+        .buffer_unordered(sub_qs.len())
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
+
+    // Deduplicate by id, preserving first occurrence (highest score per sub-query)
+    let mut seen: HashSet<Uuid> = HashSet::new();
+    all.retain(|s| seen.insert(s.id));
+
+    // Sort by retrieval_score descending, keep top_k * 2 for reranker
+    all.sort_by(|a, b| b.retrieval_score.partial_cmp(&a.retrieval_score).unwrap_or(std::cmp::Ordering::Equal));
+    all.truncate(top_k * 3);
+    all
+}
 
 /// Re-rank candidates by relevance to the question, return top `keep`.
 async fn rerank(
@@ -70,42 +120,37 @@ fn new_session(embed: OpenAIEmbeddingModel, llm: ConsolidationLlm, config: Mneme
     Session { memory, envelopes }
 }
 
-/// Recall with fallback: if semantic memory is empty (compaction failed), fall
-/// back to all-type search so we still get useful context.
+/// Recall from both semantic (compacted) and working memory, merge by retrieval score.
+/// Compaction loses fine-grained facts; raw working-memory turns fill the gap.
 async fn recall_with_fallback(
     session: &Session,
     embed: &OpenAIEmbeddingModel,
     query: &str,
     top_k: usize,
 ) -> Vec<MnemeSummary> {
-    // Primary: semantic recall (post-compaction)
-    match session.memory.recall(query, top_k).await {
-        Ok(summaries) if !summaries.is_empty() => return summaries,
-        Ok(_) => {}
-        Err(e) => warn!("recall error: {e}"),
-    }
-
-    // Fallback: search working memory directly
-    warn!("semantic memory empty — falling back to working memory search");
-    let embedding = match embed.embed(query).await {
-        Ok(e) => e,
-        Err(e) => {
-            warn!("embed fallback failed: {e}");
-            return vec![];
-        }
+    // Semantic recall (post-compaction engrams)
+    let semantic = match session.memory.recall(query, top_k).await {
+        Ok(s) => s,
+        Err(e) => { warn!("recall error: {e}"); vec![] }
     };
 
-    let q = MemoryQuery {
+    // Always also search working memory (raw turns) for granular facts
+    let embedding = match embed.embed(query).await {
+        Ok(e) => e,
+        Err(e) => { warn!("embed failed: {e}"); return semantic; }
+    };
+
+    let wm_q = MemoryQuery {
         embedding,
         top_k,
         active_only: true,
-        memory_type: None, // all types
+        memory_type: None, // all types including Working
         min_confidence: Some(0.0),
         recency_weight: 0.1,
         ..Default::default()
     };
 
-    match session.envelopes.search(&q).await {
+    let working: Vec<MnemeSummary> = match session.envelopes.search(&wm_q).await {
         Ok(results) => results
             .into_iter()
             .map(|r| MnemeSummary {
@@ -120,11 +165,19 @@ async fn recall_with_fallback(
                 is_evolved: false,
             })
             .collect(),
-        Err(e) => {
-            warn!("fallback search error: {e}");
-            vec![]
-        }
-    }
+        Err(e) => { warn!("working memory search error: {e}"); vec![] }
+    };
+
+    // Merge: deduplicate by id, keep best retrieval_score, sort descending
+    let mut seen: HashSet<Uuid> = HashSet::new();
+    let mut merged: Vec<MnemeSummary> = semantic
+        .into_iter()
+        .chain(working)
+        .filter(|s| seen.insert(s.id))
+        .collect();
+    merged.sort_by(|a, b| b.retrieval_score.partial_cmp(&a.retrieval_score).unwrap_or(std::cmp::Ordering::Equal));
+    merged.truncate(top_k * 2); // pass extra candidates to reranker
+    merged
 }
 
 pub async fn run_locomo(
@@ -155,7 +208,7 @@ pub async fn run_locomo(
 
         let session = new_session(embed.clone(), llm.clone(), config.clone());
 
-        // Ingest sessions
+        // Ingest sessions — store turns clean for accurate embeddings.
         for s in &conv.sessions {
             for turn in &s.turns {
                 if turn.trim().is_empty() {
@@ -170,64 +223,86 @@ pub async fn run_locomo(
             }
         }
 
-        // Evaluate questions
-        for q in &conv.questions {
-            let t0 = Instant::now();
-            // Fetch 15 candidates, rerank to top_k
-            let candidates = recall_with_fallback(&session, &embed, &q.question, 15).await;
-            let summaries = rerank(judge, &q.question, candidates, top_k).await;
-            let latency_ms = t0.elapsed().as_millis() as u64;
+        // Evaluate questions concurrently — recall/rerank/generate/judge are all independent.
+        let sem = Arc::new(Semaphore::new(QUESTION_CONCURRENCY));
+        let session = Arc::new(session);
+        let embed_ref = Arc::new(embed.clone());
+        let judge_ref: Arc<&LLMJudge> = Arc::new(judge);
 
-            let memory_context: String = summaries
-                .iter()
-                .enumerate()
-                .map(|(i, s)| format!("[{}] {}", i + 1, s.full_text))
-                .collect::<Vec<_>>()
-                .join("\n");
+        let mut conv_results: Vec<QuestionResult> = stream::iter(conv.questions.iter())
+            .map(|q| {
+                let sem = sem.clone();
+                let session = session.clone();
+                let embed_ref = embed_ref.clone();
+                let judge_ref = judge_ref.clone();
+                let q = q.clone();
+                async move {
+                    let _permit = sem.acquire().await.unwrap();
+                    let t0 = Instant::now();
+                    let candidates = recall_with_fallback(&session, &embed_ref, &q.question, 15).await;
+                    let summaries = rerank(&judge_ref, &q.question, candidates, top_k).await;
+                    let latency_ms = t0.elapsed().as_millis() as u64;
 
-            let tokens_used = metrics::estimate_tokens(&memory_context);
+                    let memory_context: String = summaries
+                        .iter()
+                        .enumerate()
+                        .map(|(i, s)| format!("[{}] {}", i + 1, s.full_text))
+                        .collect::<Vec<_>>()
+                        .join("\n");
 
-            let predicted = if memory_context.is_empty() {
-                "Not found in memory".to_string()
-            } else {
-                match judge.generate_answer(&q.question, &memory_context).await {
-                    Ok(a) => a,
-                    Err(e) => {
-                        warn!("generate_answer failed: {e}");
+                    let tokens_used = metrics::estimate_tokens(&memory_context);
+
+                    let predicted = if memory_context.is_empty() {
                         "Not found in memory".to_string()
-                    }
-                }
-            };
+                    } else {
+                        match judge_ref.generate_answer(&q.question, &memory_context).await {
+                            Ok(a) => a,
+                            Err(e) => {
+                                warn!("generate_answer failed: {e}");
+                                "Not found in memory".to_string()
+                            }
+                        }
+                    };
 
-            let em = metrics::exact_match(&predicted, &q.answer);
-            let f1 = metrics::token_f1(&predicted, &q.answer);
+                    let em = metrics::exact_match(&predicted, &q.answer);
+                    let f1 = metrics::token_f1(&predicted, &q.answer);
 
-            let judge_score = if use_judge {
-                match judge.score(&q.question, &q.answer, &predicted).await {
-                    Ok(s) => Some(s),
-                    Err(e) => {
-                        warn!("judge failed: {e}");
+                    let judge_score = if use_judge {
+                        if predicted == "Not found in memory" {
+                            Some(0.0)
+                        } else {
+                            match judge_ref.score(&q.question, &q.answer, &predicted).await {
+                                Ok(s) => Some(s),
+                                Err(e) => {
+                                    warn!("judge failed: {e}");
+                                    None
+                                }
+                            }
+                        }
+                    } else {
                         None
+                    };
+
+                    QuestionResult {
+                        question_id: q.question_id.clone(),
+                        category: q.category.clone(),
+                        question: q.question.clone(),
+                        ground_truth: q.answer.clone(),
+                        predicted,
+                        exact_match: em,
+                        f1,
+                        judge_score,
+                        recall_latency_ms: latency_ms,
+                        tokens_used,
+                        memories_retrieved: summaries.len(),
                     }
                 }
-            } else {
-                None
-            };
+            })
+            .buffer_unordered(QUESTION_CONCURRENCY)
+            .collect()
+            .await;
 
-            all_results.push(QuestionResult {
-                question_id: q.question_id.clone(),
-                category: q.category.clone(),
-                question: q.question.clone(),
-                ground_truth: q.answer.clone(),
-                predicted,
-                exact_match: em,
-                f1,
-                judge_score,
-                recall_latency_ms: latency_ms,
-                tokens_used,
-                memories_retrieved: summaries.len(),
-            });
-        }
+        all_results.append(&mut conv_results);
     }
 
     Ok(all_results)
@@ -247,87 +322,106 @@ pub async fn run_longmemeval(
         None => items,
     };
 
-    let mut all_results = Vec::new();
     let config = MnemeConfig::default();
+    let sem = Arc::new(Semaphore::new(QUESTION_CONCURRENCY));
+    let judge = Arc::new(judge);
 
-    for (ii, item) in items.iter().enumerate() {
-        info!(
-            "LongMemEval item {}/{}: {} turns",
-            ii + 1,
-            items.len(),
-            item.turns.len()
-        );
+    // Each LongMemEval item has its own independent session — fully parallelisable.
+    let all_results: Vec<QuestionResult> = stream::iter(items.iter().enumerate())
+        .map(|(ii, item)| {
+            let sem = sem.clone();
+            let embed = embed.clone();
+            let llm = llm.clone();
+            let judge = judge.clone();
+            let config = config.clone();
+            let item = item.clone();
+            async move {
+                let _permit = sem.acquire().await.unwrap();
+                info!(
+                    "LongMemEval item {}/{}: {} turns",
+                    ii + 1,
+                    items.len(),
+                    item.turns.len()
+                );
 
-        let session = new_session(embed.clone(), llm.clone(), config.clone());
-        let session_id = item.history_id.clone();
+                let session = new_session(embed.clone(), llm, config);
+                let session_id = item.history_id.clone();
 
-        for turn in &item.turns {
-            if turn.trim().is_empty() {
-                continue;
-            }
-            if let Err(e) = session.memory.remember(turn, &session_id).await {
-                warn!("remember failed: {e}");
-            }
-        }
-        if let Err(e) = session.memory.end_session(&session_id).await {
-            warn!("end_session failed: {e}");
-        }
+                for turn in &item.turns {
+                    if turn.trim().is_empty() {
+                        continue;
+                    }
+                    if let Err(e) = session.memory.remember(turn, &session_id).await {
+                        warn!("remember failed: {e}");
+                    }
+                }
+                if let Err(e) = session.memory.end_session(&session_id).await {
+                    warn!("end_session failed: {e}");
+                }
 
-        let t0 = Instant::now();
-        let candidates = recall_with_fallback(&session, &embed, &item.question, 15).await;
-        let summaries = rerank(judge, &item.question, candidates, top_k).await;
-        let latency_ms = t0.elapsed().as_millis() as u64;
+                let t0 = Instant::now();
+                let candidates = recall_with_fallback(&session, &embed, &item.question, 15).await;
+                let summaries = rerank(&judge, &item.question, candidates, top_k).await;
+                let latency_ms = t0.elapsed().as_millis() as u64;
 
-        let memory_context: String = summaries
-            .iter()
-            .enumerate()
-            .map(|(i, s)| format!("[{}] {}", i + 1, s.full_text))
-            .collect::<Vec<_>>()
-            .join("\n");
+                let memory_context: String = summaries
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| format!("[{}] {}", i + 1, s.full_text))
+                    .collect::<Vec<_>>()
+                    .join("\n");
 
-        let tokens_used = metrics::estimate_tokens(&memory_context);
+                let tokens_used = metrics::estimate_tokens(&memory_context);
 
-        let predicted = if memory_context.is_empty() {
-            "Not found in memory".to_string()
-        } else {
-            match judge.generate_answer(&item.question, &memory_context).await {
-                Ok(a) => a,
-                Err(e) => {
-                    warn!("generate_answer failed: {e}");
+                let predicted = if memory_context.is_empty() {
                     "Not found in memory".to_string()
-                }
-            }
-        };
+                } else {
+                    match judge.generate_answer(&item.question, &memory_context).await {
+                        Ok(a) => a,
+                        Err(e) => {
+                            warn!("generate_answer failed: {e}");
+                            "Not found in memory".to_string()
+                        }
+                    }
+                };
 
-        let em = metrics::exact_match(&predicted, &item.answer);
-        let f1 = metrics::token_f1(&predicted, &item.answer);
+                let em = metrics::exact_match(&predicted, &item.answer);
+                let f1 = metrics::token_f1(&predicted, &item.answer);
 
-        let judge_score = if use_judge {
-            match judge.score(&item.question, &item.answer, &predicted).await {
-                Ok(s) => Some(s),
-                Err(e) => {
-                    warn!("judge failed: {e}");
+                let judge_score = if use_judge {
+                    if predicted == "Not found in memory" {
+                        Some(0.0)
+                    } else {
+                        match judge.score(&item.question, &item.answer, &predicted).await {
+                            Ok(s) => Some(s),
+                            Err(e) => {
+                                warn!("judge failed: {e}");
+                                None
+                            }
+                        }
+                    }
+                } else {
                     None
+                };
+
+                QuestionResult {
+                    question_id: item.history_id.clone(),
+                    category: item.category.clone(),
+                    question: item.question.clone(),
+                    ground_truth: item.answer.clone(),
+                    predicted,
+                    exact_match: em,
+                    f1,
+                    judge_score,
+                    recall_latency_ms: latency_ms,
+                    tokens_used,
+                    memories_retrieved: summaries.len(),
                 }
             }
-        } else {
-            None
-        };
-
-        all_results.push(QuestionResult {
-            question_id: item.history_id.clone(),
-            category: item.category.clone(),
-            question: item.question.clone(),
-            ground_truth: item.answer.clone(),
-            predicted,
-            exact_match: em,
-            f1,
-            judge_score,
-            recall_latency_ms: latency_ms,
-            tokens_used,
-            memories_retrieved: summaries.len(),
-        });
-    }
+        })
+        .buffer_unordered(QUESTION_CONCURRENCY)
+        .collect()
+        .await;
 
     Ok(all_results)
 }

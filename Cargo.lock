@@ -1183,6 +1183,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "futures",
  "mneme-api",
  "mneme-consolidate",
  "mneme-core",

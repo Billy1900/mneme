@@ -1,10 +1,52 @@
 use anyhow::{anyhow, Result};
 use reqwest::Client;
+use std::time::Duration;
+
+fn strip_json_fences(s: &str) -> &str {
+    let s = s.trim();
+    let s = s.strip_prefix("```json").unwrap_or(s);
+    let s = s.strip_prefix("```").unwrap_or(s);
+    let s = s.strip_suffix("```").unwrap_or(s);
+    s.trim()
+}
+
+/// POST to OpenAI with up to 4 retries on 429, doubling delay each time.
+async fn openai_post_with_retry(
+    client: &Client,
+    api_key: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value> {
+    let mut delay = Duration::from_secs(5);
+    for attempt in 0..=3 {
+        let resp = client
+            .post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header("Content-Type", "application/json")
+            .json(body)
+            .send()
+            .await?;
+        if resp.status().as_u16() == 429 && attempt < 3 {
+            tokio::time::sleep(delay).await;
+            delay *= 2;
+            continue;
+        }
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("OpenAI error {status}: {text}"));
+        }
+        return Ok(resp.json().await?);
+    }
+    Err(anyhow!("OpenAI request failed after retries"))
+}
 
 pub struct LLMJudge {
     client: Client,
     api_key: String,
-    model: String,
+    /// Strong model for answer generation and judge scoring.
+    model_strong: String,
+    /// Cheap model for high-volume reranking and decomposition.
+    model_fast: String,
 }
 
 impl LLMJudge {
@@ -12,7 +54,8 @@ impl LLMJudge {
         Self {
             client: Client::new(),
             api_key,
-            model: "gpt-4o-mini".to_string(),
+            model_strong: "gpt-4o".to_string(),
+            model_fast: "gpt-4o-mini".to_string(),
         }
     }
 
@@ -35,47 +78,22 @@ Respond ONLY with JSON: {{"score": 0.0|0.5|1.0, "reason": "one sentence"}}"#
         );
 
         let body = serde_json::json!({
-            "model": self.model,
+            "model": self.model_strong,
             "max_tokens": 128,
             "messages": [{"role": "user", "content": prompt}],
         });
 
-        let resp = self
-            .client
-            .post("https://api.openai.com/v1/chat/completions")
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(anyhow!("OpenAI judge error {status}: {text}"));
-        }
-
-        let data: serde_json::Value = resp.json().await?;
+        let data = openai_post_with_retry(&self.client, &self.api_key, &body).await?;
         let content = data["choices"]
             .as_array()
             .and_then(|a| a.first())
             .and_then(|c| c["message"]["content"].as_str())
-            .ok_or_else(|| anyhow!("no content in judge response"))?;
+            .ok_or_else(|| anyhow!("no content in judge response"))?
+            .to_string();
 
-        // Parse JSON from response, strip markdown fences if present
-        let cleaned = content
-            .trim()
-            .strip_prefix("```json")
-            .unwrap_or(content.trim())
-            .strip_prefix("```")
-            .unwrap_or(content.trim())
-            .strip_suffix("```")
-            .unwrap_or(content.trim())
-            .trim();
-
+        let cleaned = strip_json_fences(&content);
         let parsed: serde_json::Value = serde_json::from_str(cleaned)
             .map_err(|e| anyhow!("judge parse error: {e} on: {cleaned}"))?;
-
         let score = parsed["score"]
             .as_f64()
             .ok_or_else(|| anyhow!("no score in judge response"))?;
@@ -100,7 +118,7 @@ Respond ONLY with JSON: {{"score": 0.0|0.5|1.0, "reason": "one sentence"}}"#
         );
 
         let body = serde_json::json!({
-            "model": self.model,
+            "model": self.model_fast,
             "max_tokens": 64,
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"},
@@ -163,8 +181,40 @@ Give only the answer, no explanation."#
         );
 
         let body = serde_json::json!({
-            "model": self.model,
+            "model": self.model_strong,
             "max_tokens": 128,
+            "messages": [{"role": "user", "content": prompt}],
+        });
+
+        let data = openai_post_with_retry(&self.client, &self.api_key, &body).await?;
+        let content = data["choices"]
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|c| c["message"]["content"].as_str())
+            .unwrap_or("Not found in memory")
+            .trim()
+            .to_string();
+
+        Ok(content)
+    }
+
+    /// Decompose a question into sub-queries for parallel retrieval.
+    /// Returns the original question as the sole element if it is simple/single-hop.
+    pub async fn decompose_question(&self, question: &str) -> Result<Vec<String>> {
+        let prompt = format!(
+            r#"You are a query planner for a memory retrieval system.
+
+Question: {question}
+
+If this question requires combining information from multiple distinct facts or events (multi-hop), break it into 2-3 simpler sub-questions, each retrievable independently. If it is a simple single-fact question, return it unchanged.
+
+Respond ONLY with a JSON array of strings (1-3 items), e.g.:
+["sub-question 1", "sub-question 2"]"#
+        );
+
+        let body = serde_json::json!({
+            "model": self.model_fast,
+            "max_tokens": 200,
             "messages": [{"role": "user", "content": prompt}],
         });
 
@@ -177,21 +227,27 @@ Give only the answer, no explanation."#
             .send()
             .await?;
 
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(anyhow!("OpenAI generate error {status}: {text}"));
-        }
-
         let data: serde_json::Value = resp.json().await?;
         let content = data["choices"]
             .as_array()
             .and_then(|a| a.first())
             .and_then(|c| c["message"]["content"].as_str())
-            .unwrap_or("Not found in memory")
-            .trim()
-            .to_string();
+            .unwrap_or("[]")
+            .trim();
 
-        Ok(content)
+        // Strip markdown fences if present
+        let cleaned = content
+            .strip_prefix("```json").unwrap_or(content)
+            .strip_prefix("```").unwrap_or(content)
+            .strip_suffix("```").unwrap_or(content)
+            .trim();
+
+        let sub_qs: Vec<String> = serde_json::from_str(cleaned).unwrap_or_default();
+
+        if sub_qs.is_empty() {
+            Ok(vec![question.to_string()])
+        } else {
+            Ok(sub_qs)
+        }
     }
 }

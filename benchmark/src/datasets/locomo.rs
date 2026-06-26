@@ -12,6 +12,8 @@ pub struct LoCoMoConversation {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LoCoMoSession {
     pub session_id: String,
+    #[serde(default)]
+    pub session_date: String,
     pub turns: Vec<String>,
 }
 

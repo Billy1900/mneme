@@ -48,6 +48,7 @@ def convert_locomo():
             turns_raw = conv_data.get(key)
             if turns_raw is None:
                 break
+            date_str = conv_data.get(f"session_{si}_date_time", "")
             turns = []
             for t in turns_raw:
                 speaker = t.get("speaker", "")
@@ -55,7 +56,11 @@ def convert_locomo():
                 if text:
                     turns.append(f"{speaker}: {text}" if speaker else text)
             if turns:
-                sessions.append({"session_id": f"{conv_id}_s{si}", "turns": turns})
+                sessions.append({
+                    "session_id": f"{conv_id}_s{si}",
+                    "session_date": date_str,
+                    "turns": turns,
+                })
             si += 1
 
         # Extract QA pairs
@@ -113,9 +118,13 @@ def convert_longmemeval():
         answer = str(row.get("answer", "")).strip()
         category = str(row.get("question_type", "general"))
 
-        # Collect all haystack sessions as turns
+        # Collect all haystack sessions as turns, prepending date headers
         turns = []
-        for session in row.get("haystack_sessions", []):
+        haystack_dates = row.get("haystack_dates", [])
+        for si, session in enumerate(row.get("haystack_sessions", [])):
+            date_str = haystack_dates[si] if si < len(haystack_dates) else ""
+            if date_str:
+                turns.append(f"[Session on {date_str}]")
             for t in session:
                 role = t.get("role", "")
                 content = t.get("content", "")

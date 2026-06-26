@@ -22,6 +22,7 @@ chrono     = { workspace = true }
 tracing    = { workspace = true }
 reqwest    = { workspace = true }
 
-clap   = { version = "4", features = ["derive"] }
-anyhow = "1"
+clap    = { version = "4", features = ["derive"] }
+anyhow  = "1"
+futures = "0.3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

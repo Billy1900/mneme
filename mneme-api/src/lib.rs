@@ -96,7 +96,12 @@ where
         let now = Utc::now();
 
         let summary = if observation.len() > 100 {
-            format!("{}...", &observation[..97])
+            let cut = observation.char_indices()
+                .map(|(i, _)| i)
+                .take_while(|&i| i <= 97)
+                .last()
+                .unwrap_or(0);
+            format!("{}...", &observation[..cut])
         } else {
             observation.to_string()
         };
