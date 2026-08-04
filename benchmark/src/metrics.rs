@@ -33,6 +33,14 @@ pub struct BenchmarkSummary {
     pub exact_match: f64,
     pub f1: f64,
     pub judge_score: Option<f64>,
+    /// How many questions actually received a judge score, and how many
+    /// didn't. `judge_score` is the mean over the scored ones only, so an
+    /// unscored question (judge API failure) leaves the average alone instead
+    /// of counting against it — which silently inflates the headline number
+    /// in exactly the runs where the judge was flaky. Reporting both counts
+    /// makes the denominator visible rather than changing the metric.
+    pub judge_scored: usize,
+    pub judge_missing: usize,
     pub avg_tokens_per_query: f64,
     pub p50_latency_ms: u64,
     pub p95_latency_ms: u64,
@@ -103,6 +111,8 @@ pub fn aggregate(
             exact_match: 0.0,
             f1: 0.0,
             judge_score: None,
+            judge_scored: 0,
+            judge_missing: 0,
             avg_tokens_per_query: 0.0,
             p50_latency_ms: 0,
             p95_latency_ms: 0,
@@ -120,6 +130,9 @@ pub fn aggregate(
     } else {
         Some(judge_scores.iter().sum::<f64>() / judge_scores.len() as f64)
     };
+
+    let judge_scored = judge_scores.len();
+    let judge_missing = total - judge_scored;
 
     let avg_tokens = results.iter().map(|r| r.tokens_used as f64).sum::<f64>() / total as f64;
 
@@ -165,6 +178,8 @@ pub fn aggregate(
         exact_match,
         f1,
         judge_score,
+        judge_scored,
+        judge_missing,
         avg_tokens_per_query: avg_tokens,
         p50_latency_ms: p50,
         p95_latency_ms: p95,

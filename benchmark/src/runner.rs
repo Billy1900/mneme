@@ -237,20 +237,32 @@ async fn recall_with_fallback(
     };
 
     let working: Vec<MnemeSummary> = match session.envelopes.search(&wm_q).await {
-        Ok(results) => results
-            .into_iter()
-            .map(|r| MnemeSummary {
-                id: r.envelope.id,
-                full_text: r.envelope.summary.clone(),
-                summary: r.envelope.summary,
-                confidence: r.envelope.confidence,
-                tags: r.envelope.tags,
-                similarity: r.similarity,
-                retrieval_score: r.retrieval_score,
-                version: 1,
-                is_evolved: false,
-            })
-            .collect(),
+        Ok(results) => {
+            let mut out = Vec::with_capacity(results.len());
+            for r in results {
+                // Load the real body rather than reusing the envelope summary
+                // as `full_text`. Raw turns are summarized by truncation at
+                // ~100 chars, so using the summary here fed the reranker and
+                // the answer generator a cut-off turn — on the very channel
+                // that exists to supply the verbatim detail compaction loses.
+                let full_text = match session.memory.store.content.get(r.envelope.id).await {
+                    Ok(body) => body.full_text,
+                    Err(_) => r.envelope.summary.clone(),
+                };
+                out.push(MnemeSummary {
+                    id: r.envelope.id,
+                    full_text,
+                    summary: r.envelope.summary,
+                    confidence: r.envelope.confidence,
+                    tags: r.envelope.tags,
+                    similarity: r.similarity,
+                    retrieval_score: r.retrieval_score,
+                    version: 1,
+                    is_evolved: false,
+                });
+            }
+            out
+        }
         Err(e) => {
             warn!("working memory search error: {e}");
             vec![]

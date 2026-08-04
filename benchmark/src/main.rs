@@ -295,7 +295,18 @@ async fn main() -> Result<()> {
     println!("Exact match     : {:.1}%", summary.exact_match * 100.0);
     println!("Token F1        : {:.3}", summary.f1);
     if let Some(js) = summary.judge_score {
-        println!("Judge score     : {:.3}", js);
+        println!(
+            "Judge score     : {:.3}  (over {} scored)",
+            js, summary.judge_scored
+        );
+    }
+    if summary.judge_missing > 0 {
+        // These are excluded from the mean above, so a run with many of them
+        // reports a score for a subset of the questions it claims to cover.
+        println!(
+            "!! UNSCORED     : {} question(s) got no judge score and are NOT in the mean above",
+            summary.judge_missing
+        );
     }
     println!("Avg tokens/query: {:.0}", summary.avg_tokens_per_query);
     println!("Latency p50     : {}ms", summary.p50_latency_ms);
