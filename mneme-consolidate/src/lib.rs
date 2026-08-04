@@ -15,7 +15,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 pub mod backends;
-pub use backends::{AnthropicLLM, MockLLM, OpenAILLM};
+pub use backends::{AnthropicLLM, MockLLM, OllamaLLM, OpenAILLM};
 
 #[async_trait]
 pub trait ConsolidationLLM: Send + Sync {
@@ -24,6 +24,17 @@ pub trait ConsolidationLLM: Send + Sync {
 
 #[async_trait]
 impl ConsolidationLLM for Box<dyn ConsolidationLLM> {
+    async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
+        (**self).complete(prompt).await
+    }
+}
+
+// Lets `Arc<dyn ConsolidationLLM>` itself satisfy the trait, so callers
+// (e.g. mneme-server) can pick a concrete LLM backend at runtime behind one
+// trait object — same pattern as `EmbeddingModel`'s `Arc<dyn EmbeddingModel>`
+// impl in mneme-embed.
+#[async_trait]
+impl ConsolidationLLM for std::sync::Arc<dyn ConsolidationLLM> {
     async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
         (**self).complete(prompt).await
     }
@@ -150,8 +161,26 @@ where
                 }
             }
 
+            // Carry forward every source envelope's tags (deduplicated) —
+            // this is what `uid:{user_id}` multi-tenant isolation and any
+            // other tag-based filtering (search, tests) rides on. Without
+            // this, a synthesized engram silently drops out of every
+            // tag-filtered search the moment compaction touches it.
+            let mut cluster_tags: Vec<String> = cluster_indices
+                .iter()
+                .flat_map(|&i| wm_envelopes[i].tags.iter().cloned())
+                .collect();
+            cluster_tags.sort();
+            cluster_tags.dedup();
+
             let engram = match self
-                .synthesize_cluster(&cluster_texts, &cluster_ids, &centroid, session_id)
+                .synthesize_cluster(
+                    &cluster_texts,
+                    &cluster_ids,
+                    &centroid,
+                    session_id,
+                    &cluster_tags,
+                )
                 .await
             {
                 Ok(e) => e,
@@ -187,6 +216,7 @@ where
         source_ids: &[Uuid],
         centroid: &EmbeddingVec,
         session_id: &str,
+        carried_tags: &[String],
     ) -> Result<Engram, ConsolidateError> {
         // Fast path: single-element clusters don't need LLM synthesis.
         // Just store the raw text directly as a semantic engram.
@@ -209,7 +239,7 @@ where
                     supersedes: source_ids.to_vec(),
                     superseded_by: None,
                     summary,
-                    tags: vec![],
+                    tags: carried_tags.to_vec(),
                     content_hash: seahash_str(&full_text),
                 },
                 content: ContentBody {
@@ -290,14 +320,18 @@ Respond in JSON:
                     .filter(|s| !s.is_empty())
                     .unwrap_or(&full_text)
                     .to_string(),
-                tags: parsed["tags"]
-                    .as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
+                tags: {
+                    // Union of carried-forward tags (isolation, etc. — must
+                    // survive compaction regardless of what the LLM does)
+                    // and whatever descriptive tags the LLM suggested.
+                    let mut tags = carried_tags.to_vec();
+                    if let Some(llm_tags) = parsed["tags"].as_array() {
+                        tags.extend(llm_tags.iter().filter_map(|v| v.as_str().map(String::from)));
+                    }
+                    tags.sort();
+                    tags.dedup();
+                    tags
+                },
                 // FIX #11: compute actual hash instead of hardcoding 0
                 content_hash: seahash_str(&full_text),
             },

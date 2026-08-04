@@ -564,6 +564,109 @@ mod tests {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // REGRESSION TEST: compaction must carry tags forward.
+    //
+    // Found via a real end-to-end LoCoMo run: synthesize_cluster() built the
+    // new Semantic engram's tags purely from the LLM's own JSON output
+    // (multi-item clusters) or an empty vec (single-item clusters) — the
+    // uid:{user_id} isolation tag on the source Working entries was
+    // silently dropped. Every engram compaction touched became invisible
+    // to tag-filtered /search, with zero errors anywhere — a live but
+    // silent recall bug in exactly the isolation mechanism /add and
+    // /search depend on.
+    // ═══════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_compaction_preserves_tags() {
+        use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use uuid::Uuid;
+
+        let (envelopes, content) = (InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
+        let store = MnemeStore::new(envelopes.clone(), content.clone());
+        let embed = MockEmbeddingModel::new(128);
+        let engine_embed = MockEmbeddingModel::new(128);
+        // MockLLM's canned response includes tags: ["mock"] — deliberately
+        // NOT "uid:alice", so this reproduces the exact failure mode: the
+        // LLM's own tag suggestions must be unioned with, not replace, the
+        // carried-forward isolation tag.
+        let llm = MockLLM::new();
+        let config = MnemeConfig {
+            // Identical text below already gives cosine similarity 1.0, but
+            // keep the threshold generous so this isn't sensitive to
+            // MockEmbeddingModel implementation details.
+            compaction_cluster_threshold: 0.5,
+            ..Default::default()
+        };
+        let engine = ConsolidationEngine::new(store, engine_embed, llm, config);
+
+        // Two entries with identical text (guarantees they cluster into one
+        // group under MockEmbeddingModel's hash-based embeddings) and the
+        // uid:alice isolation tag.
+        let text = "user prefers dark mode";
+        for _ in 0..2 {
+            let id = Uuid::new_v4();
+            let now = Utc::now();
+            let embedding = embed.embed(text).await.unwrap();
+            let engram = Engram {
+                envelope: Envelope {
+                    id,
+                    embedding,
+                    confidence: 0.5,
+                    created_at: now,
+                    updated_at: now,
+                    last_accessed_at: now,
+                    access_count: 0,
+                    memory_type: MemoryType::Working,
+                    source_sessions: vec!["s1".to_string()],
+                    supersedes: vec![],
+                    superseded_by: None,
+                    summary: text.to_string(),
+                    tags: vec!["uid:alice".to_string()],
+                    content_hash: 0,
+                },
+                content: ContentBody {
+                    engram_id: id,
+                    full_text: text.to_string(),
+                    provenance: vec![],
+                    conflict_log: vec![],
+                    related: vec![],
+                    version: 1,
+                },
+            };
+            envelopes.upsert(&engram.envelope).await.unwrap();
+            content.put(&engram.content).await.unwrap();
+        }
+
+        let compacted = engine.compact_session("s1").await.unwrap();
+        assert_eq!(compacted.len(), 1, "identical text should cluster into one engram");
+        let synthesized = &compacted[0];
+        assert!(
+            synthesized.envelope.tags.contains(&"uid:alice".to_string()),
+            "compaction must carry the isolation tag forward, got tags: {:?}",
+            synthesized.envelope.tags
+        );
+
+        // The real-world failure mode: a tag-filtered search for this
+        // user's data must still find the synthesized engram.
+        let query_embedding = embed.embed(text).await.unwrap();
+        let results = envelopes
+            .search(&MemoryQuery {
+                embedding: query_embedding,
+                top_k: 10,
+                active_only: true,
+                tags: vec!["uid:alice".to_string()],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(
+            results.iter().any(|r| r.envelope.id == synthesized.envelope.id),
+            "tag-filtered search must find the post-compaction engram"
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // forget() — deletes envelope and content
     // ═══════════════════════════════════════════════════════════
 

@@ -210,6 +210,90 @@ impl ConsolidationLLM for OpenAILLM {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Ollama LLM (local, no API key)
+// ─────────────────────────────────────────────────────────────
+
+/// Talks to a local Ollama daemon (default `http://localhost:11434`) instead
+/// of a paid cloud API. Lets compaction produce real (if lower-quality)
+/// synthesis without an OpenAI/Anthropic key — useful when those are
+/// unavailable (exhausted quota, no credentials) but a local model is.
+#[derive(Clone)]
+pub struct OllamaLLM {
+    base_url: String,
+    model: String,
+    client: reqwest::Client,
+}
+
+impl OllamaLLM {
+    pub fn new(model: &str) -> Self {
+        Self {
+            base_url: "http://localhost:11434".to_string(),
+            model: model.to_string(),
+            client: reqwest::Client::new(),
+        }
+    }
+
+    pub fn with_base_url(base_url: &str, model: &str) -> Self {
+        Self {
+            base_url: base_url.trim_end_matches('/').to_string(),
+            model: model.to_string(),
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+#[async_trait]
+impl ConsolidationLLM for OllamaLLM {
+    async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
+        let body = serde_json::json!({
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": false,
+            // Ollama's structured-output mode: constrains the model to emit
+            // valid JSON, so we don't need markdown-fence stripping like the
+            // cloud backends above.
+            "format": "json",
+            // Reasoning models (e.g. Qwen3) emit a long chain-of-thought
+            // before the final JSON by default — 5-10x slower for no
+            // quality benefit on a short extraction/synthesis prompt like
+            // ours. Ignored by non-reasoning models.
+            "think": false,
+        });
+
+        let response = self
+            .client
+            .post(format!("{}/api/chat", self.base_url))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ConsolidateError::LLM(format!("Ollama request failed: {e}")))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "unknown error".to_string());
+            return Err(ConsolidateError::LLM(format!(
+                "Ollama API error {}: {}",
+                status, body
+            )));
+        }
+
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
+
+        let text = data["message"]["content"]
+            .as_str()
+            .ok_or_else(|| ConsolidateError::LLM("no content in Ollama response".into()))?;
+
+        Ok(extract_json(text).to_string())
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Mock LLM (for testing)
 // ─────────────────────────────────────────────────────────────
 

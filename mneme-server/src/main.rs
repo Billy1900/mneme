@@ -30,7 +30,7 @@ use axum::{
     Router,
 };
 use mneme_api::{ContextBuilder, MnemeSummary};
-use mneme_consolidate::{ConsolidationEngine, MockLLM};
+use mneme_consolidate::{AnthropicLLM, ConsolidationEngine, ConsolidationLLM, MockLLM, OllamaLLM};
 use mneme_core::*;
 use mneme_embed::{EmbeddingModel, LocalEmbeddingModel, MockEmbeddingModel, OpenAIEmbeddingModel};
 use mneme_store::*;
@@ -55,7 +55,7 @@ pub struct AppState {
         InMemoryEnvelopeIndex,
         InMemoryContentStore,
         Arc<dyn EmbeddingModel>,
-        MockLLM,
+        Arc<dyn ConsolidationLLM>,
     >,
     /// Shared envelope index (same Arc as the one inside engine).
     envelopes: Arc<InMemoryEnvelopeIndex>,
@@ -1315,7 +1315,35 @@ pub fn build_state() -> SharedState {
     // Engine and the request handlers must share one embedding client so
     // vectors are comparable (same model, same dimensionality).
     let engine_embed = Arc::clone(&embed_model);
-    let llm = MockLLM::new();
+
+    // Compaction's LLM backend, same runtime-selectable pattern as the
+    // embedding backend above. Priority: ANTHROPIC_API_KEY (explicit env var
+    // only — deliberately NOT probing ~/.claude/.credentials.json here, or
+    // any dev machine that happens to have Claude Code installed would
+    // silently start making real API calls from `cargo test`) >
+    // MNEME_LLM_BACKEND=ollama (local, no key, needs a running
+    // `ollama serve` with MNEME_OLLAMA_MODEL — default `qwen3:8b` — already
+    // pulled) > Mock (placeholder synthesis only, tests/CI default).
+    let llm: Arc<dyn ConsolidationLLM> = match std::env::var("ANTHROPIC_API_KEY") {
+        Ok(key) if !key.trim().is_empty() => {
+            tracing::info!("Compaction LLM backend: Anthropic (claude-haiku-4-5)");
+            Arc::new(AnthropicLLM::new(key))
+        }
+        _ => match std::env::var("MNEME_LLM_BACKEND").as_deref() {
+            Ok("ollama") => {
+                let model =
+                    std::env::var("MNEME_OLLAMA_MODEL").unwrap_or_else(|_| "qwen3:8b".into());
+                tracing::info!(model, "Compaction LLM backend: Ollama (local, no API key)");
+                Arc::new(OllamaLLM::new(&model))
+            }
+            _ => {
+                tracing::warn!(
+                    "No LLM backend configured — using MockLLM (compaction produces placeholder summaries only). Set ANTHROPIC_API_KEY or MNEME_LLM_BACKEND=ollama."
+                );
+                Arc::new(MockLLM::new())
+            }
+        },
+    };
     let engine = ConsolidationEngine::new(engine_store, engine_embed, llm, config.clone());
     Arc::new(AppState {
         engine,
