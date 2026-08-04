@@ -32,7 +32,7 @@ use axum::{
 use mneme_api::{ContextBuilder, MnemeSummary};
 use mneme_consolidate::{ConsolidationEngine, MockLLM};
 use mneme_core::*;
-use mneme_embed::{EmbeddingModel, MockEmbeddingModel, OpenAIEmbeddingModel};
+use mneme_embed::{EmbeddingModel, LocalEmbeddingModel, MockEmbeddingModel, OpenAIEmbeddingModel};
 use mneme_store::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -277,9 +277,7 @@ async fn auth_middleware(
 
         match provided {
             Some(token) if token == expected => {}
-            _ => {
-                return Err(AppError::Unauthorized("invalid or missing API key".into()))
-            }
+            _ => return Err(AppError::Unauthorized("invalid or missing API key".into())),
         }
     }
     Ok(next.run(req).await)
@@ -386,6 +384,12 @@ async fn remember(
         .upsert(&engram.envelope)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
+    // BM25 indexes `summary` (~100 chars) by default; re-index with the full
+    // observation so lexical search isn't blind past the truncation point.
+    state
+        .envelopes
+        .index_full_text(id, &engram.content.full_text)
+        .await;
     state
         .content
         .put(&engram.content)
@@ -412,7 +416,9 @@ async fn recall(
         ));
     }
     if req.top_k == 0 || req.top_k > 100 {
-        return Err(AppError::BadRequest("top_k must be between 1 and 100".into()));
+        return Err(AppError::BadRequest(
+            "top_k must be between 1 and 100".into(),
+        ));
     }
 
     let query_embedding = state
@@ -429,6 +435,7 @@ async fn recall(
         tags: req.tags,
         min_confidence: Some(0.1),
         recency_weight: 0.2,
+        query_text: req.query.clone(),
     };
 
     let results = state
@@ -449,10 +456,7 @@ async fn recall(
         // For the mock server we skip the spawn since MockLLM is instant anyway,
         // but the pattern is correct for production:
         // tokio::spawn(async move { let _ = engine.reconsolidate(&results_clone, &query_str).await; });
-        let _ = state
-            .engine
-            .reconsolidate(&results_clone, &query_str)
-            .await;
+        let _ = state.engine.reconsolidate(&results_clone, &query_str).await;
     }
 
     // FIX #16: read actual version from content store
@@ -495,7 +499,10 @@ async fn recall(
         })
         .collect();
 
-    Ok(Json(RecallResponse { memories, context_xml }))
+    Ok(Json(RecallResponse {
+        memories,
+        context_xml,
+    }))
 }
 
 async fn add(
@@ -638,6 +645,13 @@ async fn write_add_messages(
             .upsert(&engram.envelope)
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
+        // BM25 indexes `summary` (~100 chars) by default; re-index with the
+        // full message so lexical search isn't blind past the truncation
+        // point — leaderboard turns routinely exceed 100 chars.
+        state
+            .envelopes
+            .index_full_text(id, &engram.content.full_text)
+            .await;
         state
             .content
             .put(&engram.content)
@@ -664,7 +678,9 @@ async fn search(
         return Err(AppError::BadRequest("user_id must not be empty".into()));
     }
     if req.top_k == 0 || req.top_k > 100 {
-        return Err(AppError::BadRequest("top_k must be between 1 and 100".into()));
+        return Err(AppError::BadRequest(
+            "top_k must be between 1 and 100".into(),
+        ));
     }
 
     // options (choice-question answers) don't change which memories are
@@ -685,6 +701,13 @@ async fn search(
     // memory_type: None searches both Working (raw turns) and Semantic
     // (compacted) memory — compaction isn't guaranteed to have run between
     // /add and /search calls, so raw turns must stay reachable.
+    //
+    // recency_weight: 0.0 — the background hourly decay task keeps lowering
+    // confidence on anything not recently accessed, and over a long-running
+    // (72h) evaluation that would push correct-but-old memories down in
+    // ranking and out of top_k. The leaderboard datasets test recall
+    // accuracy, not recency preference, so relevance (similarity) alone
+    // should drive ranking here.
     let mem_query = MemoryQuery {
         embedding: query_embedding,
         top_k: req.top_k,
@@ -692,7 +715,8 @@ async fn search(
         memory_type: None,
         tags: vec![uid_tag(&req.user_id)],
         min_confidence: None,
-        recency_weight: 0.2,
+        recency_weight: 0.0,
+        query_text: query_text.clone(),
     };
 
     let results = state
@@ -701,14 +725,39 @@ async fn search(
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
+    // Hard budget on the response body: `top_k` can be as high as 100, and
+    // `content` is the full raw text (not a truncated summary), so an
+    // unbounded response could be huge and blow the platform's token
+    // budget for the downstream answer-generation call. `results` is
+    // already ranked most-relevant-first, so truncating from the tail
+    // preserves the best evidence; per-item truncation caps any single
+    // outlier-length memory from eating the whole budget.
+    const MAX_SEARCH_TOTAL_CHARS: usize = 24_000;
+    const MAX_SEARCH_ITEM_CHARS: usize = 4_000;
+
     let mut data = Vec::with_capacity(results.len());
+    let mut total_chars = 0usize;
     for r in &results {
         // Prefer the full raw text over the (possibly truncated) summary —
         // the platform generates the final answer from this content.
-        let content = match state.content.get(r.envelope.id).await {
+        let mut content = match state.content.get(r.envelope.id).await {
             Ok(body) => body.full_text,
             Err(_) => r.envelope.summary.clone(),
         };
+        if content.len() > MAX_SEARCH_ITEM_CHARS {
+            // `truncate` requires a char boundary — back off from the byte
+            // offset to the nearest one so multi-byte UTF-8 text can't panic.
+            let mut cut = MAX_SEARCH_ITEM_CHARS;
+            while cut > 0 && !content.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            content.truncate(cut);
+            content.push_str("...");
+        }
+        if total_chars + content.len() > MAX_SEARCH_TOTAL_CHARS && !data.is_empty() {
+            break;
+        }
+        total_chars += content.len();
         data.push(SearchDataItem {
             id: r.envelope.id.to_string(),
             content,
@@ -911,6 +960,96 @@ async fn shutdown_signal() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Disk snapshot — durability for the in-memory backend
+//
+// `InMemoryEnvelopeIndex` / `InMemoryContentStore` lose everything on
+// restart. Rather than switching the default backend to SQLite (which would
+// give up the tag index and BM25 lexical channel above — neither is
+// implemented for `SqliteEnvelopeIndex`), periodically dump the in-memory
+// store to a JSON file and reload it on startup. Enabled by setting
+// `MNEME_SNAPSHOT_PATH`; a missing/unset path disables snapshotting
+// entirely (e.g. tests, ephemeral local runs).
+// ─────────────────────────────────────────────────────────────
+
+async fn save_snapshot(state: &SharedState, path: &str) {
+    let envelopes = state.envelopes.all();
+    let mut engrams = Vec::with_capacity(envelopes.len());
+    for envelope in envelopes {
+        match state.content.get(envelope.id).await {
+            Ok(content) => engrams.push(Engram { envelope, content }),
+            Err(e) => {
+                // Envelope/content are written together by every handler
+                // (`upsert` then `put`); a missing body means a write was
+                // interrupted mid-way. Skip it rather than fail the whole
+                // snapshot — it'll be recreated on the next successful add.
+                tracing::warn!(id = %envelope.id, error = %e, "snapshot: content missing for envelope, skipping");
+            }
+        }
+    }
+
+    let tmp_path = format!("{path}.tmp");
+    let json = match serde_json::to_vec(&engrams) {
+        Ok(j) => j,
+        Err(e) => {
+            tracing::warn!("snapshot: failed to serialize: {}", e);
+            return;
+        }
+    };
+    if let Err(e) = tokio::fs::write(&tmp_path, &json).await {
+        tracing::warn!("snapshot: failed to write {}: {}", tmp_path, e);
+        return;
+    }
+    // Write-then-rename so a crash mid-write can never leave a truncated/
+    // corrupt file at `path` — the old snapshot stays valid until the new
+    // one is fully on disk.
+    if let Err(e) = tokio::fs::rename(&tmp_path, path).await {
+        tracing::warn!("snapshot: failed to rename {} -> {}: {}", tmp_path, path, e);
+        return;
+    }
+    tracing::info!(count = engrams.len(), path, "snapshot saved");
+}
+
+async fn load_snapshot(state: &SharedState, path: &str) {
+    let bytes = match tokio::fs::read(path).await {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            tracing::info!(path, "snapshot: no existing snapshot, starting empty");
+            return;
+        }
+        Err(e) => {
+            tracing::warn!("snapshot: failed to read {}: {}", path, e);
+            return;
+        }
+    };
+    let engrams: Vec<Engram> = match serde_json::from_slice(&bytes) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!("snapshot: failed to parse {}: {} — starting empty", path, e);
+            return;
+        }
+    };
+
+    let count = engrams.len();
+    for engram in engrams {
+        let id = engram.envelope.id;
+        if let Err(e) = state.envelopes.upsert(&engram.envelope).await {
+            tracing::warn!(id = %id, error = %e, "snapshot: failed to restore envelope");
+            continue;
+        }
+        // Restore full-text BM25 coverage, not just the truncated summary
+        // that `upsert` alone indexes — see `index_full_text` doc comment.
+        state
+            .envelopes
+            .index_full_text(id, &engram.content.full_text)
+            .await;
+        if let Err(e) = state.content.put(&engram.content).await {
+            tracing::warn!(id = %id, error = %e, "snapshot: failed to restore content");
+        }
+    }
+    tracing::info!(count, path, "snapshot loaded");
+}
+
+// ─────────────────────────────────────────────────────────────
 // App builder — used by main and tests
 // ─────────────────────────────────────────────────────────────
 
@@ -940,24 +1079,38 @@ pub fn build_app(state: SharedState, api_key: Option<String>) -> Router {
 pub fn build_state() -> SharedState {
     let config = MnemeConfig::default();
     let (shared_envelopes, shared_content) = new_shared_memory_store();
-    let engine_store = MnemeStore::new(
-        (*shared_envelopes).clone(),
-        (*shared_content).clone(),
-    );
-    // FIX #18: use a real embedding backend when OPENAI_API_KEY is set,
-    // falling back to the deterministic mock otherwise (local dev, tests,
-    // CI — none of which have API credentials).
+    let engine_store = MnemeStore::new((*shared_envelopes).clone(), (*shared_content).clone());
+    // FIX #18: use a real embedding backend when configured, falling back to
+    // the deterministic mock otherwise (local dev, tests, CI — none of which
+    // should pay for or depend on external API credentials).
+    //
+    // Priority: OPENAI_API_KEY (if set and non-empty) > MNEME_EMBED_BACKEND=local
+    // (real embeddings via a local ONNX model, no API key or network calls
+    // needed after the first model download) > Mock (deterministic, tests only).
+    // Local isn't the unconditional default because loading the ONNX model is
+    // slow and would otherwise run on every `cargo test` invocation.
     let embed_model: Arc<dyn EmbeddingModel> = match std::env::var("OPENAI_API_KEY") {
         Ok(key) if !key.trim().is_empty() => {
             tracing::info!("Embedding backend: OpenAI (text-embedding-3-small)");
             Arc::new(OpenAIEmbeddingModel::new(key))
         }
-        _ => {
-            tracing::warn!(
-                "OPENAI_API_KEY not set — using MockEmbeddingModel (not suitable for real evaluation)"
-            );
-            Arc::new(MockEmbeddingModel::new(128))
-        }
+        _ => match std::env::var("MNEME_EMBED_BACKEND").as_deref() {
+            Ok("local") => {
+                tracing::info!(
+                    "Embedding backend: local (BGE-small-en-v1.5 via fastembed, no API key required)"
+                );
+                Arc::new(
+                    LocalEmbeddingModel::new()
+                        .expect("failed to load local embedding model (MNEME_EMBED_BACKEND=local)"),
+                )
+            }
+            _ => {
+                tracing::warn!(
+                    "No embedding backend configured — using MockEmbeddingModel (not suitable for real evaluation). Set OPENAI_API_KEY or MNEME_EMBED_BACKEND=local."
+                );
+                Arc::new(MockEmbeddingModel::new(128))
+            }
+        },
     };
     // Engine and the request handlers must share one embedding client so
     // vectors are comparable (same model, same dimensionality).
@@ -989,6 +1142,28 @@ async fn main() {
 
     let state = build_state();
 
+    // Durability: load any existing snapshot before serving, then keep
+    // saving periodically and on shutdown. Opt-in via MNEME_SNAPSHOT_PATH —
+    // unset means "ephemeral, in-memory only" (tests, quick local runs).
+    let snapshot_path = std::env::var("MNEME_SNAPSHOT_PATH").ok();
+    if let Some(path) = &snapshot_path {
+        load_snapshot(&state, path).await;
+        let save_state = Arc::clone(&state);
+        let save_path = path.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+            interval.tick().await; // skip the immediate first tick — nothing to save yet
+            loop {
+                interval.tick().await;
+                save_snapshot(&save_state, &save_path).await;
+            }
+        });
+    } else {
+        tracing::warn!(
+            "MNEME_SNAPSHOT_PATH not set — running in-memory only, all data is lost on restart"
+        );
+    }
+
     // Spawn background Ebbinghaus decay task — runs every hour
     {
         let decay_envelopes = Arc::clone(&state.envelopes);
@@ -1005,6 +1180,27 @@ async fn main() {
         });
     }
 
+    // Spawn background GC task — runs every hour. Without this, a
+    // long-running (72h) evaluation only ever grows the in-memory store:
+    // nothing previously called `/gc` automatically, so superseded/
+    // low-confidence engrams (and, once `working_memory_ttl_hours` is
+    // exceeded, stale Working memory) accumulated forever.
+    {
+        let gc_envelopes = Arc::clone(&state.envelopes);
+        let gc_confidence_floor = state.config.gc_confidence_floor;
+        let gc_ttl_hours = state.config.working_memory_ttl_hours;
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+            loop {
+                interval.tick().await;
+                match gc_envelopes.gc(gc_confidence_floor, gc_ttl_hours).await {
+                    Ok(n) => tracing::info!(removed = n, "Scheduled GC applied"),
+                    Err(e) => tracing::warn!("GC task error: {}", e),
+                }
+            }
+        });
+    }
+
     // FIX #10: read optional API key from environment
     let api_key = std::env::var("MNEME_API_KEY").ok();
     if api_key.is_some() {
@@ -1013,6 +1209,8 @@ async fn main() {
         tracing::warn!("Auth disabled: MNEME_API_KEY not set — all requests accepted");
     }
 
+    // Keep a handle for the final save below — `build_app` takes `state` by value.
+    let shutdown_state = Arc::clone(&state);
     let app = build_app(state, api_key);
 
     let addr = "0.0.0.0:3377";
@@ -1025,4 +1223,9 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
+
+    if let Some(path) = &snapshot_path {
+        tracing::info!("Saving final snapshot before exit...");
+        save_snapshot(&shutdown_state, path).await;
+    }
 }

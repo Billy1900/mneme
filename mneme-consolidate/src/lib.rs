@@ -6,7 +6,6 @@
 //! - `AnthropicLLM`: Claude via the Anthropic API (production)
 //! - `MockLLM`: deterministic responses for testing
 
-
 use async_trait::async_trait;
 use chrono::Utc;
 use mneme_core::*;
@@ -78,7 +77,12 @@ where
     L: ConsolidationLLM + 'static,
 {
     pub fn new(store: MnemeStore<E, C>, embed_model: M, llm: L, config: MnemeConfig) -> Self {
-        Self { store, embed_model, llm, config }
+        Self {
+            store,
+            embed_model,
+            llm,
+            config,
+        }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -100,14 +104,22 @@ where
         let embeddings = self.embed_model.embed_batch(&texts).await?;
 
         let clusters = agglomerative_cluster(&embeddings, self.config.compaction_cluster_threshold);
-        info!(session = session_id, clusters = clusters.len(), entries = wm_envelopes.len(), "Clustered");
+        info!(
+            session = session_id,
+            clusters = clusters.len(),
+            entries = wm_envelopes.len(),
+            "Clustered"
+        );
 
         let mut new_engrams = Vec::new();
         for cluster_indices in &clusters {
             let cluster_texts: Vec<&str> = cluster_indices.iter().map(|&i| texts[i]).collect();
             let cluster_ids: Vec<Uuid> = cluster_indices.iter().map(|&i| wm_ids[i]).collect();
             let centroid = self.compute_centroid(
-                &cluster_indices.iter().map(|&i| &embeddings[i]).collect::<Vec<_>>(),
+                &cluster_indices
+                    .iter()
+                    .map(|&i| &embeddings[i])
+                    .collect::<Vec<_>>(),
             );
 
             let existing_query = MemoryQuery {
@@ -161,7 +173,11 @@ where
             }
         }
 
-        info!(session = session_id, new = new_engrams.len(), "Compaction complete");
+        info!(
+            session = session_id,
+            new = new_engrams.len(),
+            "Compaction complete"
+        );
         Ok(new_engrams)
     }
 
@@ -349,7 +365,10 @@ Respond in JSON:
                 result.similarity,
                 envelope.access_count,
             );
-            self.store.envelopes.touch(envelope.id, new_confidence).await?;
+            self.store
+                .envelopes
+                .touch(envelope.id, new_confidence)
+                .await?;
             drift_checks.push(drift);
         }
         Ok(drift_checks)
@@ -395,8 +414,8 @@ Respond in JSON:
             .complete(&prompt)
             .await
             .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
-        let parsed: serde_json::Value = serde_json::from_str(&response)
-            .map_err(|e| ConsolidateError::Parse(e.to_string()))?;
+        let parsed: serde_json::Value =
+            serde_json::from_str(&response).map_err(|e| ConsolidateError::Parse(e.to_string()))?;
 
         match parsed["decision"].as_str().unwrap_or("keep") {
             "update" => {
@@ -408,9 +427,7 @@ Respond in JSON:
                     .as_str()
                     .unwrap_or(&envelope.summary)
                     .to_string();
-                let conf_adj = parsed["confidence_adjustment"]
-                    .as_f64()
-                    .unwrap_or(0.0) as f32;
+                let conf_adj = parsed["confidence_adjustment"].as_f64().unwrap_or(0.0) as f32;
                 let new_confidence = (envelope.confidence + conf_adj).clamp(0.0, 1.0);
                 let new_embedding = self.embed_model.embed(&new_text).await?;
                 let id = Uuid::new_v4();
@@ -458,8 +475,7 @@ Respond in JSON:
             "conflict" => {
                 warn!(engram_id = %envelope.id, "Conflict detected during reconsolidation");
                 // For now: keep memory, reduce confidence
-                let new_confidence =
-                    (envelope.confidence - 0.1).clamp(0.0, 1.0);
+                let new_confidence = (envelope.confidence - 0.1).clamp(0.0, 1.0);
                 self.store
                     .envelopes
                     .touch(envelope.id, new_confidence)
@@ -509,9 +525,8 @@ JSON:"#,
             .await
             .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
 
-        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap_or_else(|_| {
-            serde_json::Value::Null
-        });
+        let parsed: serde_json::Value =
+            serde_json::from_str(&response).unwrap_or_else(|_| serde_json::Value::Null);
 
         let full_text = parsed["full_text"]
             .as_str()

@@ -7,7 +7,6 @@
 //! Good for single-node deployments up to ~100K engrams.
 //! Beyond that, use the Qdrant backend for proper ANN indexing.
 
-
 use async_trait::async_trait;
 use chrono::Utc;
 use mneme_core::*;
@@ -24,8 +23,7 @@ pub struct SqliteEnvelopeIndex {
 
 impl SqliteEnvelopeIndex {
     pub fn new(path: &str) -> Result<Self, StoreError> {
-        let conn = Connection::open(path)
-            .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+        let conn = Connection::open(path).map_err(|e| StoreError::VectorIndex(e.to_string()))?;
 
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
@@ -68,10 +66,7 @@ impl SqliteEnvelopeIndex {
 }
 
 fn embedding_to_bytes(emb: &EmbeddingVec) -> Vec<u8> {
-    emb.0
-        .iter()
-        .flat_map(|f| f.to_le_bytes())
-        .collect()
+    emb.0.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 
 fn bytes_to_embedding(bytes: &[u8]) -> EmbeddingVec {
@@ -91,8 +86,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
             let conn = conn.lock().unwrap();
             let emb_bytes = embedding_to_bytes(&env.embedding);
             let sessions_json = serde_json::to_string(&env.source_sessions).unwrap();
-            let supersedes_json = serde_json::to_string(&env.supersedes)
-                .unwrap_or_else(|_| "[]".to_string());
+            let supersedes_json =
+                serde_json::to_string(&env.supersedes).unwrap_or_else(|_| "[]".to_string());
             let tags_json = serde_json::to_string(&env.tags).unwrap();
             let superseded_by = env.superseded_by.map(|id| id.to_string());
             conn.execute(
@@ -147,10 +142,24 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
             let type_filter: Option<String> = query.memory_type.map(|t| format!("{:?}", t));
             let conf_filter: Option<f32> = query.min_confidence;
 
-            let rows: Vec<(String, Vec<u8>, f32, String, String, String, i64, String, String, String, Option<String>, String, String, i64)> = stmt
-                .query_map(
-                    params![active_filter, type_filter, conf_filter],
-                    |row| Ok((
+            let rows: Vec<(
+                String,
+                Vec<u8>,
+                f32,
+                String,
+                String,
+                String,
+                i64,
+                String,
+                String,
+                String,
+                Option<String>,
+                String,
+                String,
+                i64,
+            )> = stmt
+                .query_map(params![active_filter, type_filter, conf_filter], |row| {
+                    Ok((
                         row.get::<_, String>(0)?,
                         row.get::<_, Vec<u8>>(1)?,
                         row.get::<_, f32>(2)?,
@@ -165,8 +174,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                         row.get::<_, String>(11)?,
                         row.get::<_, String>(12)?,
                         row.get::<_, i64>(13)?,
-                    )),
-                )
+                    ))
+                })
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
@@ -177,36 +186,55 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
 
         let mut results: Vec<RetrievalResult> = rows
             .into_iter()
-            .map(|(id, emb_bytes, confidence, created_at, updated_at, last_accessed_at,
-                   access_count, memory_type_str, sessions_json, supersedes_json,
-                   superseded_by_str, summary, tags_json, content_hash)| {
-                let embedding = bytes_to_embedding(&emb_bytes);
-                let similarity = embedding.cosine_similarity(&query.embedding);
-                let env = Envelope {
-                    id: id.parse().unwrap(),
-                    embedding,
+            .map(
+                |(
+                    id,
+                    emb_bytes,
                     confidence,
-                    created_at: created_at.parse().unwrap_or_else(|_| Utc::now()),
-                    updated_at: updated_at.parse().unwrap_or_else(|_| Utc::now()),
-                    last_accessed_at: last_accessed_at.parse().unwrap_or_else(|_| Utc::now()),
-                    access_count: access_count as u64,
-                    memory_type: if memory_type_str.contains("Working") {
-                        MemoryType::Working
-                    } else {
-                        MemoryType::Semantic
-                    },
-                    source_sessions: serde_json::from_str(&sessions_json).unwrap_or_default(),
-                    supersedes: serde_json::from_str(&supersedes_json).unwrap_or_default(),
-                    superseded_by: superseded_by_str.and_then(|s| s.parse().ok()),
+                    created_at,
+                    updated_at,
+                    last_accessed_at,
+                    access_count,
+                    memory_type_str,
+                    sessions_json,
+                    supersedes_json,
+                    superseded_by_str,
                     summary,
-                    tags: serde_json::from_str(&tags_json).unwrap_or_default(),
-                    content_hash: content_hash as u64,
-                };
-                let recency = env.time_decay(0.05) as f32;
-                let retrieval_score =
-                    (1.0 - query.recency_weight) * similarity + query.recency_weight * recency;
-                RetrievalResult { envelope: env, similarity, retrieval_score }
-            })
+                    tags_json,
+                    content_hash,
+                )| {
+                    let embedding = bytes_to_embedding(&emb_bytes);
+                    let similarity = embedding.cosine_similarity(&query.embedding);
+                    let env = Envelope {
+                        id: id.parse().unwrap(),
+                        embedding,
+                        confidence,
+                        created_at: created_at.parse().unwrap_or_else(|_| Utc::now()),
+                        updated_at: updated_at.parse().unwrap_or_else(|_| Utc::now()),
+                        last_accessed_at: last_accessed_at.parse().unwrap_or_else(|_| Utc::now()),
+                        access_count: access_count as u64,
+                        memory_type: if memory_type_str.contains("Working") {
+                            MemoryType::Working
+                        } else {
+                            MemoryType::Semantic
+                        },
+                        source_sessions: serde_json::from_str(&sessions_json).unwrap_or_default(),
+                        supersedes: serde_json::from_str(&supersedes_json).unwrap_or_default(),
+                        superseded_by: superseded_by_str.and_then(|s| s.parse().ok()),
+                        summary,
+                        tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+                        content_hash: content_hash as u64,
+                    };
+                    let recency = env.time_decay(0.05) as f32;
+                    let retrieval_score =
+                        (1.0 - query.recency_weight) * similarity + query.recency_weight * recency;
+                    RetrievalResult {
+                        envelope: env,
+                        similarity,
+                        retrieval_score,
+                    }
+                },
+            )
             .filter(|r| {
                 query.tags.is_empty() || query.tags.iter().all(|t| r.envelope.tags.contains(t))
             })
@@ -233,18 +261,31 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                         id: row.get::<_, String>(0)?.parse().unwrap(),
                         embedding: bytes_to_embedding(&emb_bytes),
                         confidence: row.get(2)?,
-                        created_at: row.get::<_, String>(3)?.parse().unwrap_or_else(|_| Utc::now()),
-                        updated_at: row.get::<_, String>(4)?.parse().unwrap_or_else(|_| Utc::now()),
-                        last_accessed_at: row.get::<_, String>(5)?.parse().unwrap_or_else(|_| Utc::now()),
+                        created_at: row
+                            .get::<_, String>(3)?
+                            .parse()
+                            .unwrap_or_else(|_| Utc::now()),
+                        updated_at: row
+                            .get::<_, String>(4)?
+                            .parse()
+                            .unwrap_or_else(|_| Utc::now()),
+                        last_accessed_at: row
+                            .get::<_, String>(5)?
+                            .parse()
+                            .unwrap_or_else(|_| Utc::now()),
                         access_count: row.get::<_, i64>(6)? as u64,
                         memory_type: if row.get::<_, String>(7)?.contains("Working") {
                             MemoryType::Working
                         } else {
                             MemoryType::Semantic
                         },
-                        source_sessions: serde_json::from_str(&row.get::<_, String>(8)?).unwrap_or_default(),
-                        supersedes: serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default(),
-                        superseded_by: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
+                        source_sessions: serde_json::from_str(&row.get::<_, String>(8)?)
+                            .unwrap_or_default(),
+                        supersedes: serde_json::from_str(&row.get::<_, String>(9)?)
+                            .unwrap_or_default(),
+                        superseded_by: row
+                            .get::<_, Option<String>>(10)?
+                            .and_then(|s| s.parse().ok()),
                         summary: row.get(11)?,
                         tags: serde_json::from_str(&row.get::<_, String>(12)?).unwrap_or_default(),
                         content_hash: row.get::<_, i64>(13)? as u64,
@@ -316,15 +357,16 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
         let session_id = session_id.to_string();
         tokio::task::spawn_blocking(move || {
             let conn = conn.lock().unwrap();
-            let mut stmt = conn.prepare(
-                "SELECT e.id, e.embedding, e.confidence, e.created_at, e.updated_at,
+            let mut stmt = conn
+                .prepare(
+                    "SELECT e.id, e.embedding, e.confidence, e.created_at, e.updated_at,
                         e.last_accessed_at, e.access_count, e.memory_type, e.source_sessions,
                         e.supersedes, e.superseded_by, e.summary, e.tags, e.content_hash
                  FROM envelopes e, json_each(e.source_sessions) s
                  WHERE e.memory_type = 'Working'
                    AND s.value = ?1",
-            )
-            .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+                )
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
 
             let rows: Vec<Envelope> = stmt
                 .query_map(params![session_id], |row| {
@@ -333,14 +375,27 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                         id: row.get::<_, String>(0)?.parse().unwrap(),
                         embedding: bytes_to_embedding(&emb_bytes),
                         confidence: row.get(2)?,
-                        created_at: row.get::<_, String>(3)?.parse().unwrap_or_else(|_| Utc::now()),
-                        updated_at: row.get::<_, String>(4)?.parse().unwrap_or_else(|_| Utc::now()),
-                        last_accessed_at: row.get::<_, String>(5)?.parse().unwrap_or_else(|_| Utc::now()),
+                        created_at: row
+                            .get::<_, String>(3)?
+                            .parse()
+                            .unwrap_or_else(|_| Utc::now()),
+                        updated_at: row
+                            .get::<_, String>(4)?
+                            .parse()
+                            .unwrap_or_else(|_| Utc::now()),
+                        last_accessed_at: row
+                            .get::<_, String>(5)?
+                            .parse()
+                            .unwrap_or_else(|_| Utc::now()),
                         access_count: row.get::<_, i64>(6)? as u64,
                         memory_type: MemoryType::Working,
-                        source_sessions: serde_json::from_str(&row.get::<_, String>(8)?).unwrap_or_default(),
-                        supersedes: serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default(),
-                        superseded_by: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
+                        source_sessions: serde_json::from_str(&row.get::<_, String>(8)?)
+                            .unwrap_or_default(),
+                        supersedes: serde_json::from_str(&row.get::<_, String>(9)?)
+                            .unwrap_or_default(),
+                        superseded_by: row
+                            .get::<_, Option<String>>(10)?
+                            .and_then(|s| s.parse().ok()),
                         summary: row.get(11)?,
                         tags: serde_json::from_str(&row.get::<_, String>(12)?).unwrap_or_default(),
                         content_hash: row.get::<_, i64>(13)? as u64,
@@ -361,7 +416,11 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
             let conn = conn.lock().unwrap();
             conn.execute(
                 "UPDATE envelopes SET superseded_by = ?1, updated_at = ?2 WHERE id = ?3",
-                params![successor.to_string(), Utc::now().to_rfc3339(), id.to_string()],
+                params![
+                    successor.to_string(),
+                    Utc::now().to_rfc3339(),
+                    id.to_string()
+                ],
             )
             .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             Ok::<_, StoreError>(())
@@ -375,13 +434,14 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
         tokio::task::spawn_blocking(move || {
             let conn = conn.lock().unwrap();
             let cutoff = Utc::now() - chrono::Duration::hours(older_than_hours as i64);
-            let removed = conn.execute(
-                "DELETE FROM envelopes
+            let removed = conn
+                .execute(
+                    "DELETE FROM envelopes
                  WHERE (memory_type = 'Working' AND created_at < ?1)
                     OR (confidence < ?2 AND superseded_by IS NOT NULL)",
-                params![cutoff.to_rfc3339(), confidence_floor],
-            )
-            .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+                    params![cutoff.to_rfc3339(), confidence_floor],
+                )
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             Ok::<_, StoreError>(removed)
         })
         .await
@@ -393,7 +453,10 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
         tokio::task::spawn_blocking(move || {
             let conn = conn.lock().unwrap();
             let n = conn
-                .execute("DELETE FROM envelopes WHERE id = ?1", params![id.to_string()])
+                .execute(
+                    "DELETE FROM envelopes WHERE id = ?1",
+                    params![id.to_string()],
+                )
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             if n == 0 {
                 return Err(StoreError::NotFound(id));
@@ -433,9 +496,7 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
 
             let rows: Vec<(String, f32, String)> = stmt
-                .query_map([], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-                })
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
@@ -470,13 +531,25 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                 .query_row("SELECT COUNT(*) FROM envelopes", [], |r| r.get(0))
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             let working: usize = conn
-                .query_row("SELECT COUNT(*) FROM envelopes WHERE memory_type = 'Working'", [], |r| r.get(0))
+                .query_row(
+                    "SELECT COUNT(*) FROM envelopes WHERE memory_type = 'Working'",
+                    [],
+                    |r| r.get(0),
+                )
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             let semantic: usize = conn
-                .query_row("SELECT COUNT(*) FROM envelopes WHERE memory_type = 'Semantic'", [], |r| r.get(0))
+                .query_row(
+                    "SELECT COUNT(*) FROM envelopes WHERE memory_type = 'Semantic'",
+                    [],
+                    |r| r.get(0),
+                )
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             let superseded: usize = conn
-                .query_row("SELECT COUNT(*) FROM envelopes WHERE superseded_by IS NOT NULL", [], |r| r.get(0))
+                .query_row(
+                    "SELECT COUNT(*) FROM envelopes WHERE superseded_by IS NOT NULL",
+                    [],
+                    |r| r.get(0),
+                )
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             let avg_confidence: f32 = if total == 0 {
                 0.0

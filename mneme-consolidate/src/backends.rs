@@ -55,10 +55,9 @@ impl AnthropicLLM {
     pub fn from_claude_credentials() -> Result<Self, String> {
         let home = std::env::var("HOME").map_err(|e| e.to_string())?;
         let path = format!("{}/.claude/.credentials.json", home);
-        let text = std::fs::read_to_string(&path)
-            .map_err(|e| format!("read {path}: {e}"))?;
-        let val: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("parse credentials: {e}"))?;
+        let text = std::fs::read_to_string(&path).map_err(|e| format!("read {path}: {e}"))?;
+        let val: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("parse credentials: {e}"))?;
         let token = val["claudeAiOauth"]["accessToken"]
             .as_str()
             .ok_or("no accessToken")?

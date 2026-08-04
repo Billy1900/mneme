@@ -44,7 +44,13 @@ pub struct BenchmarkSummary {
 pub fn normalize(s: &str) -> String {
     s.to_lowercase()
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == ' ' { c } else { ' ' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == ' ' {
+                c
+            } else {
+                ' '
+            }
+        })
         .collect::<String>()
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -139,7 +145,15 @@ pub fn aggregate(
             } else {
                 Some(js.iter().sum::<f64>() / js.len() as f64)
             };
-            (cat, CategoryMetrics { count: n, exact_match: em, f1: f, judge_score: js_avg })
+            (
+                cat,
+                CategoryMetrics {
+                    count: n,
+                    exact_match: em,
+                    f1: f,
+                    judge_score: js_avg,
+                },
+            )
         })
         .collect();
 

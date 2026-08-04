@@ -57,7 +57,11 @@ async fn recall_multihop(
     all.retain(|s| seen.insert(s.id));
 
     // Sort by retrieval_score descending, keep top_k * 2 for reranker
-    all.sort_by(|a, b| b.retrieval_score.partial_cmp(&a.retrieval_score).unwrap_or(std::cmp::Ordering::Equal));
+    all.sort_by(|a, b| {
+        b.retrieval_score
+            .partial_cmp(&a.retrieval_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     all.truncate(top_k * 3);
     all
 }
@@ -131,13 +135,19 @@ async fn recall_with_fallback(
     // Semantic recall (post-compaction engrams)
     let semantic = match session.memory.recall(query, top_k).await {
         Ok(s) => s,
-        Err(e) => { warn!("recall error: {e}"); vec![] }
+        Err(e) => {
+            warn!("recall error: {e}");
+            vec![]
+        }
     };
 
     // Always also search working memory (raw turns) for granular facts
     let embedding = match embed.embed(query).await {
         Ok(e) => e,
-        Err(e) => { warn!("embed failed: {e}"); return semantic; }
+        Err(e) => {
+            warn!("embed failed: {e}");
+            return semantic;
+        }
     };
 
     let wm_q = MemoryQuery {
@@ -165,7 +175,10 @@ async fn recall_with_fallback(
                 is_evolved: false,
             })
             .collect(),
-        Err(e) => { warn!("working memory search error: {e}"); vec![] }
+        Err(e) => {
+            warn!("working memory search error: {e}");
+            vec![]
+        }
     };
 
     // Merge: deduplicate by id, keep best retrieval_score, sort descending
@@ -175,7 +188,11 @@ async fn recall_with_fallback(
         .chain(working)
         .filter(|s| seen.insert(s.id))
         .collect();
-    merged.sort_by(|a, b| b.retrieval_score.partial_cmp(&a.retrieval_score).unwrap_or(std::cmp::Ordering::Equal));
+    merged.sort_by(|a, b| {
+        b.retrieval_score
+            .partial_cmp(&a.retrieval_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     merged.truncate(top_k * 2); // pass extra candidates to reranker
     merged
 }
@@ -239,7 +256,8 @@ pub async fn run_locomo(
                 async move {
                     let _permit = sem.acquire().await.unwrap();
                     let t0 = Instant::now();
-                    let candidates = recall_with_fallback(&session, &embed_ref, &q.question, 15).await;
+                    let candidates =
+                        recall_with_fallback(&session, &embed_ref, &q.question, 15).await;
                     let summaries = rerank(&judge_ref, &q.question, candidates, top_k).await;
                     let latency_ms = t0.elapsed().as_millis() as u64;
 
@@ -255,7 +273,10 @@ pub async fn run_locomo(
                     let predicted = if memory_context.is_empty() {
                         "Not found in memory".to_string()
                     } else {
-                        match judge_ref.generate_answer(&q.question, &memory_context).await {
+                        match judge_ref
+                            .generate_answer(&q.question, &memory_context)
+                            .await
+                        {
                             Ok(a) => a,
                             Err(e) => {
                                 warn!("generate_answer failed: {e}");

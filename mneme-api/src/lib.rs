@@ -79,7 +79,12 @@ where
         embed_model: M,
         config: MnemeConfig,
     ) -> Self {
-        Self { store, engine, embed_model, config }
+        Self {
+            store,
+            engine,
+            embed_model,
+            config,
+        }
     }
 
     // ─────────────────────────────────────────────────────────
@@ -96,7 +101,8 @@ where
         let now = Utc::now();
 
         let summary = if observation.len() > 100 {
-            let cut = observation.char_indices()
+            let cut = observation
+                .char_indices()
                 .map(|(i, _)| i)
                 .take_while(|&i| i <= 97)
                 .last()

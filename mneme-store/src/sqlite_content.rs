@@ -19,8 +19,7 @@ pub struct SqliteContentStore {
 
 impl SqliteContentStore {
     pub fn new(path: &str) -> Result<Self, StoreError> {
-        let conn = Connection::open(path)
-            .map_err(|e| StoreError::DocumentStore(e.to_string()))?;
+        let conn = Connection::open(path).map_err(|e| StoreError::DocumentStore(e.to_string()))?;
 
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
@@ -126,7 +125,11 @@ impl ContentStore for SqliteContentStore {
         .map_err(|e| StoreError::DocumentStore(e.to_string()))?
     }
 
-    async fn append_conflict(&self, engram_id: Uuid, record: ConflictRecord) -> Result<(), StoreError> {
+    async fn append_conflict(
+        &self,
+        engram_id: Uuid,
+        record: ConflictRecord,
+    ) -> Result<(), StoreError> {
         let conn = Arc::clone(&self.conn);
         tokio::task::spawn_blocking(move || {
             let conn = conn.lock().unwrap();

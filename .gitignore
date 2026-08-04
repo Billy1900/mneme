@@ -16,6 +16,12 @@ target
 # Benchmark result files (large JSON, not source)
 benchmark/results/
 
+# Downloaded local embedding model weights (fastembed / ONNX Runtime)
+.fastembed_cache/
+
+# Server disk snapshot (MNEME_SNAPSHOT_PATH), if left at a default in-repo path
+mneme-snapshot.json
+
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

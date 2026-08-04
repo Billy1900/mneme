@@ -102,7 +102,12 @@ Respond ONLY with JSON: {{"score": 0.0|0.5|1.0, "reason": "one sentence"}}"#
     }
 
     /// Return indices (0-based) of the `keep` most relevant candidates for the question.
-    pub async fn rerank_indices(&self, question: &str, candidates: &[&str], keep: usize) -> Result<Vec<usize>> {
+    pub async fn rerank_indices(
+        &self,
+        question: &str,
+        candidates: &[&str],
+        keep: usize,
+    ) -> Result<Vec<usize>> {
         let numbered: String = candidates
             .iter()
             .enumerate()
@@ -141,9 +146,11 @@ Respond ONLY with JSON: {{"score": 0.0|0.5|1.0, "reason": "one sentence"}}"#
             .unwrap_or("{}");
 
         // response_format json_object wraps array as {"result":[...]} or similar
-        let parsed: serde_json::Value = serde_json::from_str(content).unwrap_or(serde_json::Value::Null);
+        let parsed: serde_json::Value =
+            serde_json::from_str(content).unwrap_or(serde_json::Value::Null);
         // try common wrapper keys, or parse content directly as array
-        let arr = parsed.as_array()
+        let arr = parsed
+            .as_array()
             .or_else(|| parsed["result"].as_array())
             .or_else(|| parsed["indices"].as_array())
             .or_else(|| parsed["rankings"].as_array());
@@ -237,9 +244,12 @@ Respond ONLY with a JSON array of strings (1-3 items), e.g.:
 
         // Strip markdown fences if present
         let cleaned = content
-            .strip_prefix("```json").unwrap_or(content)
-            .strip_prefix("```").unwrap_or(content)
-            .strip_suffix("```").unwrap_or(content)
+            .strip_prefix("```json")
+            .unwrap_or(content)
+            .strip_prefix("```")
+            .unwrap_or(content)
+            .strip_suffix("```")
+            .unwrap_or(content)
             .trim();
 
         let sub_qs: Vec<String> = serde_json::from_str(cleaned).unwrap_or_default();

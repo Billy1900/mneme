@@ -55,8 +55,7 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    let openai_key = std::env::var("OPENAI_API_KEY")
-        .context("OPENAI_API_KEY must be set")?;
+    let openai_key = std::env::var("OPENAI_API_KEY").context("OPENAI_API_KEY must be set")?;
 
     let embed = OpenAIEmbeddingModel::new(openai_key.clone());
     // Use Claude (via OAuth credentials) for compaction synthesis; fall back to OpenAI if unavailable.
@@ -111,15 +110,13 @@ async fn main() -> Result<()> {
         bail!("No results produced — check dataset format");
     }
 
-    let summary = metrics::aggregate(
-        bench_name,
-        "text-embedding-3-small",
-        "gpt-4o-mini",
-        results,
-    );
+    let summary = metrics::aggregate(bench_name, "text-embedding-3-small", "gpt-4o-mini", results);
 
     // Print summary to stdout
-    println!("\n========== {} RESULTS ==========", bench_name.to_uppercase());
+    println!(
+        "\n========== {} RESULTS ==========",
+        bench_name.to_uppercase()
+    );
     println!("Total questions : {}", summary.total_questions);
     println!("Exact match     : {:.1}%", summary.exact_match * 100.0);
     println!("Token F1        : {:.3}", summary.f1);
@@ -133,7 +130,13 @@ async fn main() -> Result<()> {
     let mut cats: Vec<_> = summary.per_category.iter().collect();
     cats.sort_by_key(|(k, _)| k.as_str());
     for (cat, m) in &cats {
-        print!("  {:30} n={:4}  EM={:.1}%  F1={:.3}", cat, m.count, m.exact_match * 100.0, m.f1);
+        print!(
+            "  {:30} n={:4}  EM={:.1}%  F1={:.3}",
+            cat,
+            m.count,
+            m.exact_match * 100.0,
+            m.f1
+        );
         if let Some(js) = m.judge_score {
             print!("  judge={:.3}", js);
         }

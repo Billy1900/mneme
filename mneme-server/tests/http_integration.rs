@@ -216,14 +216,8 @@ async fn test_http_remember_then_expand() {
     use mneme_embed::MockEmbeddingModel;
     use mneme_store::{InMemoryContentStore, InMemoryEnvelopeIndex, MnemeStore};
 
-    let store = MnemeStore::new(
-        InMemoryEnvelopeIndex::new(),
-        InMemoryContentStore::new(),
-    );
-    let engine_store = MnemeStore::new(
-        InMemoryEnvelopeIndex::new(),
-        InMemoryContentStore::new(),
-    );
+    let store = MnemeStore::new(InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
+    let engine_store = MnemeStore::new(InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
     let embed = MockEmbeddingModel::new(128);
     let engine_embed = MockEmbeddingModel::new(128);
     let llm = MockLLM::new();
@@ -246,14 +240,8 @@ async fn test_http_forget() {
     use mneme_embed::MockEmbeddingModel;
     use mneme_store::{InMemoryContentStore, InMemoryEnvelopeIndex, MnemeStore};
 
-    let store = MnemeStore::new(
-        InMemoryEnvelopeIndex::new(),
-        InMemoryContentStore::new(),
-    );
-    let engine_store = MnemeStore::new(
-        InMemoryEnvelopeIndex::new(),
-        InMemoryContentStore::new(),
-    );
+    let store = MnemeStore::new(InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
+    let engine_store = MnemeStore::new(InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
     let embed = MockEmbeddingModel::new(128);
     let engine_embed = MockEmbeddingModel::new(128);
     let llm = MockLLM::new();
@@ -263,7 +251,10 @@ async fn test_http_forget() {
 
     let id = memory.remember("to be forgotten", "s1").await.unwrap();
     memory.forget(id).await.unwrap();
-    assert!(memory.expand(id).await.is_err(), "expand after forget should fail");
+    assert!(
+        memory.expand(id).await.is_err(),
+        "expand after forget should fail"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -300,14 +291,8 @@ async fn test_http_history() {
     use mneme_embed::MockEmbeddingModel;
     use mneme_store::{InMemoryContentStore, InMemoryEnvelopeIndex, MnemeStore};
 
-    let store = MnemeStore::new(
-        InMemoryEnvelopeIndex::new(),
-        InMemoryContentStore::new(),
-    );
-    let engine_store = MnemeStore::new(
-        InMemoryEnvelopeIndex::new(),
-        InMemoryContentStore::new(),
-    );
+    let store = MnemeStore::new(InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
+    let engine_store = MnemeStore::new(InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
     let embed = MockEmbeddingModel::new(128);
     let engine_embed = MockEmbeddingModel::new(128);
     let llm = MockLLM::new();
@@ -317,7 +302,10 @@ async fn test_http_history() {
 
     let id = memory.remember("a fact", "s1").await.unwrap();
     let chain = memory.history(id).await.unwrap();
-    assert!(!chain.is_empty(), "history should have at least one version");
+    assert!(
+        !chain.is_empty(),
+        "history should have at least one version"
+    );
     assert_eq!(chain[0].id, id);
 }
 
@@ -403,9 +391,7 @@ async fn test_http_auth_rejects_missing_token() {
                 .method("POST")
                 .uri("/recall")
                 .header("Content-Type", "application/json")
-                .body(Body::from(
-                    json!({"query": "test", "top_k": 5}).to_string(),
-                ))
+                .body(Body::from(json!({"query": "test", "top_k": 5}).to_string()))
                 .unwrap(),
         )
         .await
@@ -429,9 +415,7 @@ async fn test_http_auth_accepts_correct_token() {
                 .uri("/recall")
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer secret")
-                .body(Body::from(
-                    json!({"query": "test", "top_k": 5}).to_string(),
-                ))
+                .body(Body::from(json!({"query": "test", "top_k": 5}).to_string()))
                 .unwrap(),
         )
         .await

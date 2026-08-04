@@ -160,6 +160,10 @@ pub struct MemoryQuery {
     pub tags: Vec<String>,
     pub min_confidence: Option<f32>,
     pub recency_weight: f32,
+    /// Raw query text for lexical (BM25) matching against envelope summaries,
+    /// fused with vector similarity via Reciprocal Rank Fusion. Empty string
+    /// disables the lexical channel and falls back to pure vector search.
+    pub query_text: String,
 }
 
 impl Default for MemoryQuery {
@@ -172,6 +176,7 @@ impl Default for MemoryQuery {
             tags: vec![],
             min_confidence: None,
             recency_weight: 0.2,
+            query_text: String::new(),
         }
     }
 }

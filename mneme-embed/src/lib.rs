@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use mneme_core::EmbeddingVec;
 
 pub mod backends;
-pub use backends::{MockEmbeddingModel, OpenAIEmbeddingModel};
+pub use backends::{LocalEmbeddingModel, MockEmbeddingModel, OpenAIEmbeddingModel};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EmbedError {

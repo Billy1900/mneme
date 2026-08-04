@@ -19,17 +19,17 @@ pub mod memory;
 pub mod memory_content;
 
 #[cfg(feature = "sqlite")]
-pub mod sqlite_envelope;
-#[cfg(feature = "sqlite")]
 pub mod sqlite_content;
+#[cfg(feature = "sqlite")]
+pub mod sqlite_envelope;
 
 pub use memory::InMemoryEnvelopeIndex;
 pub use memory_content::InMemoryContentStore;
 
 #[cfg(feature = "sqlite")]
-pub use sqlite_envelope::SqliteEnvelopeIndex;
-#[cfg(feature = "sqlite")]
 pub use sqlite_content::SqliteContentStore;
+#[cfg(feature = "sqlite")]
+pub use sqlite_envelope::SqliteEnvelopeIndex;
 
 // ─────────────────────────────────────────────────────────────
 // Error types
@@ -72,7 +72,11 @@ pub trait ContentStore: Send + Sync {
     async fn get(&self, engram_id: Uuid) -> Result<ContentBody, StoreError>;
     async fn get_batch(&self, ids: &[Uuid]) -> Result<Vec<ContentBody>, StoreError>;
     async fn delete(&self, engram_id: Uuid) -> Result<(), StoreError>;
-    async fn append_conflict(&self, engram_id: Uuid, record: ConflictRecord) -> Result<(), StoreError>;
+    async fn append_conflict(
+        &self,
+        engram_id: Uuid,
+        record: ConflictRecord,
+    ) -> Result<(), StoreError>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -157,10 +161,7 @@ impl<E: EnvelopeIndex, C: ContentStore> SharedMnemeStore<E, C> {
 
 /// Constructor for a shared in-memory store. Returns Arc'd backends that
 /// can be handed both to the server state and to the ConsolidationEngine.
-pub fn new_shared_memory_store() -> (
-    Arc<InMemoryEnvelopeIndex>,
-    Arc<InMemoryContentStore>,
-) {
+pub fn new_shared_memory_store() -> (Arc<InMemoryEnvelopeIndex>, Arc<InMemoryContentStore>) {
     (
         Arc::new(InMemoryEnvelopeIndex::new()),
         Arc::new(InMemoryContentStore::new()),

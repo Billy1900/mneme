@@ -67,6 +67,67 @@ impl EmbeddingModel for MockEmbeddingModel {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Local embedding model (fastembed / ONNX, no API key required)
+// ─────────────────────────────────────────────────────────────
+
+/// Real embeddings without depending on a paid external API. Runs
+/// BGE-small-en-v1.5 (384-dim) locally via ONNX Runtime; the model weights
+/// are downloaded from Hugging Face on first use and cached under
+/// `~/.cache/fastembed` afterwards, so there's no per-request network call
+/// or per-token cost. This is the default backend when `OPENAI_API_KEY`
+/// isn't set — a missing/exhausted API key shouldn't be the reason
+/// retrieval quality can't be evaluated.
+#[derive(Clone)]
+pub struct LocalEmbeddingModel {
+    model: std::sync::Arc<std::sync::Mutex<fastembed::TextEmbedding>>,
+    dim: usize,
+}
+
+impl LocalEmbeddingModel {
+    pub fn new() -> Result<Self, EmbedError> {
+        let model = fastembed::TextEmbedding::try_new(
+            fastembed::InitOptions::new(fastembed::EmbeddingModel::BGESmallENV15)
+                .with_show_download_progress(true),
+        )
+        .map_err(|e| EmbedError::Model(format!("failed to load local embedding model: {e}")))?;
+        Ok(Self {
+            model: std::sync::Arc::new(std::sync::Mutex::new(model)),
+            dim: 384,
+        })
+    }
+}
+
+#[async_trait]
+impl EmbeddingModel for LocalEmbeddingModel {
+    async fn embed(&self, text: &str) -> Result<EmbeddingVec, EmbedError> {
+        let batch = self.embed_batch(&[text]).await?;
+        batch
+            .into_iter()
+            .next()
+            .ok_or_else(|| EmbedError::Model("empty response".into()))
+    }
+
+    async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<EmbeddingVec>, EmbedError> {
+        let owned: Vec<String> = texts.iter().map(|s| s.to_string()).collect();
+        let model = self.model.clone();
+        // ONNX inference is blocking CPU work — run it off the async
+        // executor so it doesn't stall other requests on the same runtime.
+        tokio::task::spawn_blocking(move || {
+            let mut model = model.lock().unwrap();
+            model.embed(owned, None)
+        })
+        .await
+        .map_err(|e| EmbedError::Model(format!("embedding task panicked: {e}")))?
+        .map_err(|e| EmbedError::Model(format!("local embedding failed: {e}")))
+        .map(|vecs| vecs.into_iter().map(EmbeddingVec).collect())
+    }
+
+    fn dim(&self) -> usize {
+        self.dim
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // OpenAI embedding model
 // ─────────────────────────────────────────────────────────────
 

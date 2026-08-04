@@ -7,7 +7,6 @@
 //! 4. Evolution → drift detection + reconsolidation
 //! 5. Conflict resolution → three strategies
 
-
 #[cfg(test)]
 mod tests {
     use mneme_consolidate::{ConsolidationEngine, MockLLM};
@@ -44,8 +43,7 @@ mod tests {
         let engine_content = InMemoryContentStore::new();
         let engine_store = MnemeStore::new(engine_envelopes, engine_content);
         let engine_embed = MockEmbeddingModel::new(128);
-        let engine =
-            ConsolidationEngine::new(engine_store, engine_embed, llm, config.clone());
+        let engine = ConsolidationEngine::new(engine_store, engine_embed, llm, config.clone());
 
         (store, engine, embed_model, config)
     }
@@ -175,8 +173,7 @@ mod tests {
     async fn test_content_body_roundtrip() {
         let (store, _, embed, _) = build_test_system();
 
-        let id =
-            insert_working_memory(&store, &embed, "detailed observation text", "s2").await;
+        let id = insert_working_memory(&store, &embed, "detailed observation text", "s2").await;
 
         let body = store.content.get(id).await.unwrap();
         assert_eq!(body.full_text, "detailed observation text");
@@ -196,8 +193,7 @@ mod tests {
         let (store, _, embed, _) = build_test_system();
 
         insert_working_memory(&store, &embed, "working memory item", "s3").await;
-        insert_semantic_memory(&store, &embed, "semantic memory item", "semantic item", 0.8)
-            .await;
+        insert_semantic_memory(&store, &embed, "semantic memory item", "semantic item", 0.8).await;
 
         let query_emb = embed.embed("memory").await.unwrap();
 
@@ -239,7 +235,11 @@ mod tests {
         let old_id = insert_semantic_memory(&store, &embed, "old fact", "old", 0.7).await;
         let new_id = insert_semantic_memory(&store, &embed, "new fact", "new", 0.9).await;
 
-        store.envelopes.mark_superseded(old_id, new_id).await.unwrap();
+        store
+            .envelopes
+            .mark_superseded(old_id, new_id)
+            .await
+            .unwrap();
 
         let old_env = store.envelopes.get(old_id).await.unwrap();
         assert!(!old_env.is_active());
@@ -258,7 +258,11 @@ mod tests {
 
         let old_id = insert_semantic_memory(&store, &embed, "old fact", "old", 0.7).await;
         let new_id = insert_semantic_memory(&store, &embed, "new fact", "new", 0.9).await;
-        store.envelopes.mark_superseded(old_id, new_id).await.unwrap();
+        store
+            .envelopes
+            .mark_superseded(old_id, new_id)
+            .await
+            .unwrap();
 
         let query_emb = embed.embed("fact").await.unwrap();
         let query = MemoryQuery {
@@ -297,10 +301,13 @@ mod tests {
     async fn test_gc_removes_low_confidence_superseded() {
         let (store, _, embed, _) = build_test_system();
 
-        let old_id =
-            insert_semantic_memory(&store, &embed, "stale memory", "stale", 0.04).await;
+        let old_id = insert_semantic_memory(&store, &embed, "stale memory", "stale", 0.04).await;
         let new_id = insert_semantic_memory(&store, &embed, "fresh memory", "fresh", 0.9).await;
-        store.envelopes.mark_superseded(old_id, new_id).await.unwrap();
+        store
+            .envelopes
+            .mark_superseded(old_id, new_id)
+            .await
+            .unwrap();
 
         let removed = store
             .envelopes
@@ -387,11 +394,9 @@ mod tests {
         use chrono::Utc;
 
         let (store, _, embed, _) = build_test_system();
-        let id =
-            insert_semantic_memory(&store, &embed, "contested fact", "contested", 0.7).await;
+        let id = insert_semantic_memory(&store, &embed, "contested fact", "contested", 0.7).await;
         let other_id =
-            insert_semantic_memory(&store, &embed, "conflicting fact", "conflicting", 0.7)
-                .await;
+            insert_semantic_memory(&store, &embed, "conflicting fact", "conflicting", 0.7).await;
 
         let record = ConflictRecord {
             conflicting_id: other_id,
@@ -515,16 +520,10 @@ mod tests {
         let (shared_envelopes, shared_content) = new_shared_memory_store();
 
         // Server-side store (what the HTTP handler writes to)
-        let server_store = MnemeStore::new(
-            (*shared_envelopes).clone(),
-            (*shared_content).clone(),
-        );
+        let server_store = MnemeStore::new((*shared_envelopes).clone(), (*shared_content).clone());
 
         // Engine-side store (uses the SAME Arc clones — FIX #1)
-        let engine_store = MnemeStore::new(
-            (*shared_envelopes).clone(),
-            (*shared_content).clone(),
-        );
+        let engine_store = MnemeStore::new((*shared_envelopes).clone(), (*shared_content).clone());
 
         let embed = MockEmbeddingModel::new(128);
         let engine_embed = MockEmbeddingModel::new(128);
@@ -537,11 +536,9 @@ mod tests {
 
         // Write via "server" path
         let id1 =
-            insert_working_memory(&server_store, &embed, "observation A", "shared-session")
-                .await;
+            insert_working_memory(&server_store, &embed, "observation A", "shared-session").await;
         let id2 =
-            insert_working_memory(&server_store, &embed, "observation B", "shared-session")
-                .await;
+            insert_working_memory(&server_store, &embed, "observation B", "shared-session").await;
 
         // Engine should see both entries — the old bug would have found 0
         let wm = engine
@@ -576,7 +573,8 @@ mod tests {
 
         let (envelopes, content) = (InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
         let store = MnemeStore::new(envelopes, content);
-        let engine_store = MnemeStore::new(InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
+        let engine_store =
+            MnemeStore::new(InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
         let embed = MockEmbeddingModel::new(128);
         let engine_embed = MockEmbeddingModel::new(128);
         let llm = MockLLM::new();
@@ -587,7 +585,10 @@ mod tests {
         let id = memory.remember("to be forgotten", "s1").await.unwrap();
         memory.forget(id).await.unwrap();
 
-        assert!(memory.expand(id).await.is_err(), "expand after forget should fail");
+        assert!(
+            memory.expand(id).await.is_err(),
+            "expand after forget should fail"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -596,8 +597,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_decay_reduces_confidence() {
-        use mneme_embed::EmbeddingModel;
         use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
         use uuid::Uuid;
 
         let store = InMemoryEnvelopeIndex::new();
@@ -643,9 +644,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_envelope_upsert_and_get() {
-        use mneme_store::{SqliteContentStore, SqliteEnvelopeIndex};
-        use mneme_embed::EmbeddingModel;
         use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use mneme_store::{SqliteContentStore, SqliteEnvelopeIndex};
         use uuid::Uuid;
 
         let idx = SqliteEnvelopeIndex::in_memory().unwrap();
@@ -683,9 +684,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_envelope_search() {
-        use mneme_store::SqliteEnvelopeIndex;
-        use mneme_embed::EmbeddingModel;
         use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use mneme_store::SqliteEnvelopeIndex;
         use uuid::Uuid;
 
         let idx = SqliteEnvelopeIndex::in_memory().unwrap();
@@ -712,14 +713,17 @@ mod tests {
         };
         idx.upsert(&envelope).await.unwrap();
 
-        let results = idx.search(&MemoryQuery {
-            embedding,
-            top_k: 5,
-            active_only: true,
-            memory_type: Some(MemoryType::Semantic),
-            min_confidence: Some(0.1),
-            ..Default::default()
-        }).await.unwrap();
+        let results = idx
+            .search(&MemoryQuery {
+                embedding,
+                top_k: 5,
+                active_only: true,
+                memory_type: Some(MemoryType::Semantic),
+                min_confidence: Some(0.1),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
 
         assert!(!results.is_empty());
         assert_eq!(results[0].envelope.id, id);
@@ -727,9 +731,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_envelope_search_tags_filter() {
-        use mneme_store::SqliteEnvelopeIndex;
-        use mneme_embed::EmbeddingModel;
         use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use mneme_store::SqliteEnvelopeIndex;
         use uuid::Uuid;
 
         let idx = SqliteEnvelopeIndex::in_memory().unwrap();
@@ -785,16 +789,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_envelope_mark_superseded() {
-        use mneme_store::SqliteEnvelopeIndex;
-        use mneme_embed::EmbeddingModel;
         use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use mneme_store::SqliteEnvelopeIndex;
         use uuid::Uuid;
 
         let idx = SqliteEnvelopeIndex::in_memory().unwrap();
         let embed = MockEmbeddingModel::new(64);
         let now = Utc::now();
 
-        async fn make_env(id: Uuid, summary: &str, embed: &MockEmbeddingModel, now: chrono::DateTime<Utc>) -> Envelope {
+        async fn make_env(
+            id: Uuid,
+            summary: &str,
+            embed: &MockEmbeddingModel,
+            now: chrono::DateTime<Utc>,
+        ) -> Envelope {
             let emb = embed.embed(summary).await.unwrap();
             Envelope {
                 id,
@@ -816,8 +825,12 @@ mod tests {
 
         let old_id = Uuid::new_v4();
         let new_id = Uuid::new_v4();
-        idx.upsert(&make_env(old_id, "old fact", &embed, now).await).await.unwrap();
-        idx.upsert(&make_env(new_id, "new fact", &embed, now).await).await.unwrap();
+        idx.upsert(&make_env(old_id, "old fact", &embed, now).await)
+            .await
+            .unwrap();
+        idx.upsert(&make_env(new_id, "new fact", &embed, now).await)
+            .await
+            .unwrap();
         idx.mark_superseded(old_id, new_id).await.unwrap();
 
         let old = idx.get(old_id).await.unwrap();
@@ -827,9 +840,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_envelope_gc() {
-        use mneme_store::SqliteEnvelopeIndex;
-        use mneme_embed::EmbeddingModel;
         use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use mneme_store::SqliteEnvelopeIndex;
         use uuid::Uuid;
 
         let idx = SqliteEnvelopeIndex::in_memory().unwrap();
@@ -837,24 +850,39 @@ mod tests {
         let now = Utc::now();
 
         async fn make_env_with_conf(
-            id: Uuid, confidence: f32, summary: &str,
-            embed: &MockEmbeddingModel, now: chrono::DateTime<Utc>,
+            id: Uuid,
+            confidence: f32,
+            summary: &str,
+            embed: &MockEmbeddingModel,
+            now: chrono::DateTime<Utc>,
         ) -> Envelope {
             let emb = embed.embed(summary).await.unwrap();
             Envelope {
-                id, embedding: emb, confidence,
-                created_at: now, updated_at: now, last_accessed_at: now,
-                access_count: 0, memory_type: MemoryType::Semantic,
+                id,
+                embedding: emb,
+                confidence,
+                created_at: now,
+                updated_at: now,
+                last_accessed_at: now,
+                access_count: 0,
+                memory_type: MemoryType::Semantic,
                 source_sessions: vec!["s1".to_string()],
-                supersedes: vec![], superseded_by: None,
-                summary: summary.to_string(), tags: vec![], content_hash: 0,
+                supersedes: vec![],
+                superseded_by: None,
+                summary: summary.to_string(),
+                tags: vec![],
+                content_hash: 0,
             }
         }
 
         let stale_id = Uuid::new_v4();
         let fresh_id = Uuid::new_v4();
-        idx.upsert(&make_env_with_conf(stale_id, 0.02, "stale", &embed, now).await).await.unwrap();
-        idx.upsert(&make_env_with_conf(fresh_id, 0.9, "fresh", &embed, now).await).await.unwrap();
+        idx.upsert(&make_env_with_conf(stale_id, 0.02, "stale", &embed, now).await)
+            .await
+            .unwrap();
+        idx.upsert(&make_env_with_conf(fresh_id, 0.9, "fresh", &embed, now).await)
+            .await
+            .unwrap();
         idx.mark_superseded(stale_id, fresh_id).await.unwrap();
 
         let removed = idx.gc(0.05, 24 * 365 * 10).await.unwrap();
@@ -865,9 +893,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_envelope_delete() {
-        use mneme_store::SqliteEnvelopeIndex;
-        use mneme_embed::EmbeddingModel;
         use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use mneme_store::SqliteEnvelopeIndex;
         use uuid::Uuid;
 
         let idx = SqliteEnvelopeIndex::in_memory().unwrap();
@@ -877,12 +905,20 @@ mod tests {
         let embedding = embed.embed("deletable").await.unwrap();
 
         let envelope = Envelope {
-            id, embedding, confidence: 0.5,
-            created_at: now, updated_at: now, last_accessed_at: now,
-            access_count: 0, memory_type: MemoryType::Semantic,
+            id,
+            embedding,
+            confidence: 0.5,
+            created_at: now,
+            updated_at: now,
+            last_accessed_at: now,
+            access_count: 0,
+            memory_type: MemoryType::Semantic,
             source_sessions: vec!["s1".to_string()],
-            supersedes: vec![], superseded_by: None,
-            summary: "deletable".to_string(), tags: vec![], content_hash: 0,
+            supersedes: vec![],
+            superseded_by: None,
+            summary: "deletable".to_string(),
+            tags: vec![],
+            content_hash: 0,
         };
         idx.upsert(&envelope).await.unwrap();
         idx.delete(id).await.unwrap();
@@ -891,9 +927,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_envelope_apply_decay() {
-        use mneme_store::SqliteEnvelopeIndex;
-        use mneme_embed::EmbeddingModel;
         use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use mneme_store::SqliteEnvelopeIndex;
         use uuid::Uuid;
 
         let idx = SqliteEnvelopeIndex::in_memory().unwrap();
@@ -903,13 +939,20 @@ mod tests {
         let embedding = embed.embed("decayable").await.unwrap();
 
         let envelope = Envelope {
-            id, embedding, confidence: 1.0,
-            created_at: now, updated_at: now,
+            id,
+            embedding,
+            confidence: 1.0,
+            created_at: now,
+            updated_at: now,
             last_accessed_at: now - chrono::Duration::hours(100),
-            access_count: 0, memory_type: MemoryType::Semantic,
+            access_count: 0,
+            memory_type: MemoryType::Semantic,
             source_sessions: vec!["s1".to_string()],
-            supersedes: vec![], superseded_by: None,
-            summary: "decayable".to_string(), tags: vec![], content_hash: 0,
+            supersedes: vec![],
+            superseded_by: None,
+            summary: "decayable".to_string(),
+            tags: vec![],
+            content_hash: 0,
         };
         idx.upsert(&envelope).await.unwrap();
 
@@ -917,14 +960,18 @@ mod tests {
         assert!(updated >= 1);
 
         let after = idx.get(id).await.unwrap();
-        assert!(after.confidence < 1.0, "confidence should decay, got {}", after.confidence);
+        assert!(
+            after.confidence < 1.0,
+            "confidence should decay, got {}",
+            after.confidence
+        );
     }
 
     #[tokio::test]
     async fn test_sqlite_envelope_stats() {
-        use mneme_store::SqliteEnvelopeIndex;
-        use mneme_embed::EmbeddingModel;
         use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use mneme_store::SqliteEnvelopeIndex;
         use uuid::Uuid;
 
         let idx = SqliteEnvelopeIndex::in_memory().unwrap();
@@ -932,22 +979,37 @@ mod tests {
         let now = Utc::now();
 
         async fn make_typed(
-            id: Uuid, mt: MemoryType, summary: &str,
-            embed: &MockEmbeddingModel, now: chrono::DateTime<Utc>,
+            id: Uuid,
+            mt: MemoryType,
+            summary: &str,
+            embed: &MockEmbeddingModel,
+            now: chrono::DateTime<Utc>,
         ) -> Envelope {
             let emb = embed.embed(summary).await.unwrap();
             Envelope {
-                id, embedding: emb, confidence: 0.8,
-                created_at: now, updated_at: now, last_accessed_at: now,
-                access_count: 0, memory_type: mt,
+                id,
+                embedding: emb,
+                confidence: 0.8,
+                created_at: now,
+                updated_at: now,
+                last_accessed_at: now,
+                access_count: 0,
+                memory_type: mt,
                 source_sessions: vec!["s1".to_string()],
-                supersedes: vec![], superseded_by: None,
-                summary: summary.to_string(), tags: vec![], content_hash: 0,
+                supersedes: vec![],
+                superseded_by: None,
+                summary: summary.to_string(),
+                tags: vec![],
+                content_hash: 0,
             }
         }
 
-        idx.upsert(&make_typed(Uuid::new_v4(), MemoryType::Working, "wm", &embed, now).await).await.unwrap();
-        idx.upsert(&make_typed(Uuid::new_v4(), MemoryType::Semantic, "sm", &embed, now).await).await.unwrap();
+        idx.upsert(&make_typed(Uuid::new_v4(), MemoryType::Working, "wm", &embed, now).await)
+            .await
+            .unwrap();
+        idx.upsert(&make_typed(Uuid::new_v4(), MemoryType::Semantic, "sm", &embed, now).await)
+            .await
+            .unwrap();
 
         let stats = idx.stats().await.unwrap();
         assert_eq!(stats.total_engrams, 2);
@@ -957,8 +1019,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_content_roundtrip() {
-        use mneme_store::SqliteContentStore;
         use chrono::Utc;
+        use mneme_store::SqliteContentStore;
         use uuid::Uuid;
 
         let store = SqliteContentStore::in_memory().unwrap();
@@ -988,8 +1050,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_content_delete() {
-        use mneme_store::SqliteContentStore;
         use chrono::Utc;
+        use mneme_store::SqliteContentStore;
         use uuid::Uuid;
 
         let store = SqliteContentStore::in_memory().unwrap();
@@ -1009,9 +1071,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_session_id_exact_match() {
-        use mneme_store::SqliteEnvelopeIndex;
-        use mneme_embed::EmbeddingModel;
         use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use mneme_store::SqliteEnvelopeIndex;
         use uuid::Uuid;
 
         let idx = SqliteEnvelopeIndex::in_memory().unwrap();
@@ -1019,22 +1081,36 @@ mod tests {
         let now = Utc::now();
 
         async fn make_working(
-            session: &str, summary: &str,
-            embed: &MockEmbeddingModel, now: chrono::DateTime<Utc>,
+            session: &str,
+            summary: &str,
+            embed: &MockEmbeddingModel,
+            now: chrono::DateTime<Utc>,
         ) -> Envelope {
             let emb = embed.embed(summary).await.unwrap();
             Envelope {
-                id: Uuid::new_v4(), embedding: emb, confidence: 0.5,
-                created_at: now, updated_at: now, last_accessed_at: now,
-                access_count: 0, memory_type: MemoryType::Working,
+                id: Uuid::new_v4(),
+                embedding: emb,
+                confidence: 0.5,
+                created_at: now,
+                updated_at: now,
+                last_accessed_at: now,
+                access_count: 0,
+                memory_type: MemoryType::Working,
                 source_sessions: vec![session.to_string()],
-                supersedes: vec![], superseded_by: None,
-                summary: summary.to_string(), tags: vec![], content_hash: 0,
+                supersedes: vec![],
+                superseded_by: None,
+                summary: summary.to_string(),
+                tags: vec![],
+                content_hash: 0,
             }
         }
 
-        idx.upsert(&make_working("session-A", "entry A", &embed, now).await).await.unwrap();
-        idx.upsert(&make_working("session-AB", "entry AB", &embed, now).await).await.unwrap();
+        idx.upsert(&make_working("session-A", "entry A", &embed, now).await)
+            .await
+            .unwrap();
+        idx.upsert(&make_working("session-AB", "entry AB", &embed, now).await)
+            .await
+            .unwrap();
 
         let results_a = idx.list_working_memory("session-A").await.unwrap();
         assert_eq!(results_a.len(), 1, "session-A must not match session-AB");

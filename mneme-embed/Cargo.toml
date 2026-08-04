@@ -9,3 +9,5 @@ mneme-core = { path = "../mneme-core" }
 thiserror = { workspace = true }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt"] }
+fastembed = { version = "5.17.4", default-features = false, features = ["hf-hub", "ort-download-binaries"] }
