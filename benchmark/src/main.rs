@@ -62,9 +62,33 @@ struct Args {
     #[arg(long, default_value = "results/run.json")]
     out: PathBuf,
 
-    /// LLM backend for compaction, judge, rerank, and decomposition
-    #[arg(long, value_enum, default_value = "deepseek")]
-    llm: LlmBackend,
+    /// LLM backend used *inside the memory system* — compaction synthesis and
+    /// fact extraction on the Add path.
+    ///
+    /// This is the one the Agent Memory Leaderboard constrains: submissions
+    /// must run Add and Search on gpt-4o-mini, which is `--memory-llm openai`
+    /// (OpenAILLM defaults to gpt-4o-mini). Note that mneme's Search path
+    /// calls no LLM at all — it's embeddings + BM25 — so fact extraction on
+    /// Add is the entire compliance surface.
+    ///
+    /// Accepts `--llm` as an alias so existing run scripts keep working.
+    #[arg(long, value_enum, alias = "llm", default_value = "deepseek")]
+    memory_llm: LlmBackend,
+
+    /// LLM backend for the *evaluation apparatus* — answer generation, judge
+    /// scoring, reranking, and query decomposition.
+    ///
+    /// This is local measurement machinery, not part of the submitted system,
+    /// so it is unconstrained by the leaderboard's model rule. It is also
+    /// where nearly all the token volume goes, which is the point of splitting
+    /// it out: `--memory-llm openai --judge-llm deepseek` gives a
+    /// submission-representative Add path while keeping the expensive half on
+    /// a cheaper model.
+    ///
+    /// Defaults to whatever `--memory-llm` is, preserving the single-backend
+    /// behaviour of the old `--llm` flag.
+    #[arg(long, value_enum)]
+    judge_llm: Option<LlmBackend>,
 
     /// Embedding backend for semantic recall
     #[arg(long, value_enum, default_value = "local")]
@@ -76,7 +100,11 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "mneme_benchmark=info".into()),
+                // The log target is the *binary* crate name (`mneme_bench`,
+                // from [[bin]]), not the package name (`mneme_benchmark`) —
+                // filtering on the latter silently suppressed every log line
+                // this binary emits. Keep both so either name works.
+                .unwrap_or_else(|_| "mneme_bench=info,mneme_benchmark=info".into()),
         )
         .init();
 
@@ -93,37 +121,60 @@ async fn main() -> Result<()> {
         }
     };
 
-    // LLM backend drives both compaction synthesis and the judge (answer
-    // generation, scoring, reranking, query decomposition).
-    let (llm, judge) = match args.llm {
+    // The memory system's LLM and the evaluation apparatus's LLM are selected
+    // independently — they answer to different constraints. The memory LLM is
+    // part of the submitted system and must be gpt-4o-mini for a compliant
+    // leaderboard run; the judge is local measurement machinery and is free.
+    let judge_backend = args.judge_llm.clone().unwrap_or_else(|| {
+        // Judge defaults to the memory backend, which reproduces the old
+        // single-`--llm` behaviour for anyone who passes only one flag.
+        args.memory_llm.clone()
+    });
+
+    let llm = match args.memory_llm {
         LlmBackend::Deepseek => {
             let key = std::env::var("DEEPSEEK_API_KEY").context("DEEPSEEK_API_KEY must be set")?;
-            info!("Using DeepSeek for compaction LLM and judge");
-            (
-                runner::ConsolidationLlm::DeepSeek(DeepSeekLLM::new(key.clone())),
-                judge::LLMJudge::new_deepseek(key),
-            )
+            runner::ConsolidationLlm::DeepSeek(DeepSeekLLM::new(key))
         }
         LlmBackend::Anthropic => {
             let claude = AnthropicLLM::from_claude_credentials()
                 .map_err(|e| anyhow::anyhow!("Claude credentials unavailable: {e}"))?;
-            let key = std::env::var("DEEPSEEK_API_KEY")
-                .context("DEEPSEEK_API_KEY must be set (judge runs on DeepSeek when llm=anthropic)")?;
-            info!("Using Claude (OAuth) for compaction LLM, DeepSeek for judge");
-            (
-                runner::ConsolidationLlm::Anthropic(claude),
-                judge::LLMJudge::new_deepseek(key),
-            )
+            runner::ConsolidationLlm::Anthropic(claude)
         }
         LlmBackend::Openai => {
-            let key = std::env::var("OPENAI_API_KEY").context("OPENAI_API_KEY must be set")?;
-            info!("Using OpenAI for compaction LLM and judge");
-            (
-                runner::ConsolidationLlm::OpenAI(OpenAILLM::new(key.clone())),
-                judge::LLMJudge::new(key),
-            )
+            let key = std::env::var("OPENAI_API_KEY")
+                .context("OPENAI_API_KEY must be set for --memory-llm openai")?;
+            runner::ConsolidationLlm::OpenAI(OpenAILLM::new(key))
         }
     };
+
+    let judge = match judge_backend {
+        LlmBackend::Deepseek => {
+            let key = std::env::var("DEEPSEEK_API_KEY")
+                .context("DEEPSEEK_API_KEY must be set for --judge-llm deepseek")?;
+            judge::LLMJudge::new_deepseek(key)
+        }
+        LlmBackend::Openai => {
+            let key = std::env::var("OPENAI_API_KEY")
+                .context("OPENAI_API_KEY must be set for --judge-llm openai")?;
+            judge::LLMJudge::new(key)
+        }
+        // The judge talks the OpenAI chat-completions wire format, which
+        // Anthropic's API is not compatible with, so there is no Anthropic
+        // judge to fall back to. Previously `--llm anthropic` silently routed
+        // the judge to DeepSeek; that implicit substitution is now an explicit
+        // choice the caller has to make.
+        LlmBackend::Anthropic => bail!(
+            "--judge-llm anthropic is not supported (the judge speaks the OpenAI \
+             chat-completions wire format). Pass --judge-llm deepseek or --judge-llm openai."
+        ),
+    };
+
+    info!(
+        memory_llm = ?args.memory_llm,
+        judge_llm = ?judge_backend,
+        "LLM backends selected"
+    );
 
     if let Some(parent) = args.out.parent() {
         std::fs::create_dir_all(parent)?;
@@ -174,11 +225,20 @@ async fn main() -> Result<()> {
         EmbedBackend::Local => "bge-small-en-v1.5",
         EmbedBackend::Openai => "text-embedding-3-small",
     };
-    let llm_name = match args.llm {
+    // Record both backends, not one. Now that the memory system and the judge
+    // can differ, a results file that names a single model can't tell you
+    // whether the run was submission-representative — which is precisely the
+    // question these files exist to answer.
+    let backend_name = |b: &LlmBackend| match b {
         LlmBackend::Deepseek => "deepseek-v4-flash",
-        LlmBackend::Anthropic => "claude-haiku-4-5 + deepseek-chat (judge)",
+        LlmBackend::Anthropic => "claude-haiku-4-5",
         LlmBackend::Openai => "gpt-4o-mini",
     };
+    let llm_name = &format!(
+        "memory={} judge={}",
+        backend_name(&args.memory_llm),
+        backend_name(&judge_backend),
+    );
     let summary = metrics::aggregate(bench_name, embed_name, llm_name, results);
 
     // Print summary to stdout

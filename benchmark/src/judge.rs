@@ -110,8 +110,7 @@ Respond ONLY with JSON: {{"score": 0.0|0.5|1.0, "reason": "one sentence"}}"#
             "messages": [{"role": "user", "content": prompt}],
         });
 
-        let data =
-            chat_post_with_retry(&self.client, &self.base_url, &self.api_key, &body).await?;
+        let data = chat_post_with_retry(&self.client, &self.base_url, &self.api_key, &body).await?;
         let content = data["choices"]
             .as_array()
             .and_then(|a| a.first())
@@ -226,8 +225,7 @@ Give only the answer, no explanation."#
             "messages": [{"role": "user", "content": prompt}],
         });
 
-        let data =
-            chat_post_with_retry(&self.client, &self.base_url, &self.api_key, &body).await?;
+        let data = chat_post_with_retry(&self.client, &self.base_url, &self.api_key, &body).await?;
         let content = data["choices"]
             .as_array()
             .and_then(|a| a.first())

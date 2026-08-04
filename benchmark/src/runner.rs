@@ -174,7 +174,11 @@ struct Session {
     envelopes: Arc<InMemoryEnvelopeIndex>,
 }
 
-fn new_session(embed: Arc<dyn EmbeddingModel>, llm: ConsolidationLlm, config: MnemeConfig) -> Session {
+fn new_session(
+    embed: Arc<dyn EmbeddingModel>,
+    llm: ConsolidationLlm,
+    config: MnemeConfig,
+) -> Session {
     let envelopes = Arc::new(InMemoryEnvelopeIndex::new());
     let content = Arc::new(InMemoryContentStore::new());
 
