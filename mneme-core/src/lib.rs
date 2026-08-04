@@ -64,11 +64,64 @@ pub struct Envelope {
     pub summary: String,
     pub tags: Vec<String>,
     pub content_hash: u64,
+    /// **Valid time**: when the asserted fact became true *in the world*.
+    ///
+    /// This is a different axis from `created_at`/`updated_at`, which are
+    /// *transaction time* — when the system learned or recorded something.
+    /// "Melanie adopted Cooper in May 2023", recorded today, has a
+    /// `valid_at` of May 2023 and a `created_at` of today. Keeping both is
+    /// what makes "what was true as of date X" answerable, as opposed to
+    /// "what did we write down before date X".
+    ///
+    /// `None` means unknown — treat the fact as valid for all time up to
+    /// `invalid_at`. Optional and `#[serde(default)]` so envelopes written
+    /// before this field existed still deserialize from snapshots, WAL lines
+    /// and Qdrant payloads.
+    #[serde(default)]
+    pub valid_at: Option<DateTime<Utc>>,
+    /// **Valid time**: when the asserted fact stopped being true.
+    ///
+    /// `None` means still believed true. Set by conflict resolution when a
+    /// newer fact contradicts this one, which is the distinction between
+    /// invalidation and supersession: `superseded_by` says "a newer *version*
+    /// of this memory exists", `invalid_at` says "this was true, and then it
+    /// wasn't". A superseded engram was never true-then-false; an invalidated
+    /// one still correctly answers a question asked about an earlier time.
+    #[serde(default)]
+    pub invalid_at: Option<DateTime<Utc>>,
 }
 
 impl Envelope {
     pub fn is_active(&self) -> bool {
         self.superseded_by.is_none()
+    }
+
+    /// Whether this engram's fact was true at `at`, on the valid-time axis.
+    ///
+    /// An unknown `valid_at` is treated as "true from the beginning" rather
+    /// than "never true" — most engrams carry no explicit valid time, and
+    /// excluding them would filter away nearly the whole store.
+    pub fn is_valid_at(&self, at: DateTime<Utc>) -> bool {
+        let started = self.valid_at.is_none_or(|start| at >= start);
+        let not_yet_ended = self.invalid_at.is_none_or(|end| at < end);
+        started && not_yet_ended
+    }
+
+    /// Whether the fact is believed true right now.
+    pub fn is_valid_now(&self) -> bool {
+        self.is_valid_at(Utc::now())
+    }
+
+    /// Mark the fact as having stopped being true at `at`.
+    ///
+    /// Idempotent in the sense that the earliest invalidation wins: once a
+    /// fact is known to have ended, a later contradiction shouldn't extend
+    /// its validity window.
+    pub fn invalidate(&mut self, at: DateTime<Utc>) {
+        self.invalid_at = Some(match self.invalid_at {
+            Some(existing) => existing.min(at),
+            None => at,
+        });
     }
 
     /// Ebbinghaus forgetting curve decay.
@@ -164,6 +217,16 @@ pub struct MemoryQuery {
     /// fused with vector similarity via Reciprocal Rank Fusion. Empty string
     /// disables the lexical channel and falls back to pure vector search.
     pub query_text: String,
+    /// Valid-time filter: keep only engrams whose fact was true at this
+    /// instant (see [`Envelope::is_valid_at`]). `Utc::now()` answers "what is
+    /// true today"; a past instant answers "what was believed true then".
+    ///
+    /// `None` disables validity filtering entirely and returns invalidated
+    /// engrams alongside current ones. That is the default deliberately —
+    /// it keeps every existing caller's behaviour unchanged, and makes
+    /// dropping contradicted facts an explicit decision at each call site
+    /// rather than a silent global one.
+    pub as_of: Option<DateTime<Utc>>,
 }
 
 impl Default for MemoryQuery {
@@ -177,6 +240,7 @@ impl Default for MemoryQuery {
             min_confidence: None,
             recency_weight: 0.2,
             query_text: String::new(),
+            as_of: None,
         }
     }
 }
@@ -234,6 +298,43 @@ pub struct ExtractedFact {
 }
 
 impl ExtractedFact {
+    /// Best-effort conversion of the free-form `date` string into a valid-time
+    /// instant for [`Envelope::valid_at`].
+    ///
+    /// The extractor returns whatever the conversation said — "8 May 2023",
+    /// "May 2023", "2023-05-08". Only unambiguous absolute forms are accepted;
+    /// relative expressions ("last month", "yesterday") are deliberately not
+    /// resolved here, because doing so correctly needs the conversation's own
+    /// reference date and guessing would write a confidently wrong timestamp
+    /// into the validity window — worse than leaving it unknown.
+    ///
+    /// Month-only forms resolve to the first of the month: a fact known to
+    /// hold "in May 2023" is valid from the start of May, which is the
+    /// conservative reading for an `as_of` query.
+    pub fn valid_at(&self) -> Option<DateTime<Utc>> {
+        let raw = self.date.as_deref()?.trim();
+        if raw.is_empty() {
+            return None;
+        }
+
+        let midnight_utc = |d: chrono::NaiveDate| d.and_hms_opt(0, 0, 0).map(|dt| dt.and_utc());
+
+        // Full dates first, then month-only, most-specific to least.
+        for fmt in ["%Y-%m-%d", "%d %B %Y", "%d %b %Y", "%B %d, %Y", "%b %d, %Y"] {
+            if let Ok(d) = chrono::NaiveDate::parse_from_str(raw, fmt) {
+                return midnight_utc(d);
+            }
+        }
+        for fmt in ["%B %Y", "%b %Y", "%Y-%m"] {
+            if let Ok(d) =
+                chrono::NaiveDate::parse_from_str(&format!("1 {raw}"), &format!("%d {fmt}"))
+            {
+                return midnight_utc(d);
+            }
+        }
+        None
+    }
+
     /// The triplet form of this fact, if the extractor decomposed it.
     pub fn as_triplet(&self, source_engram_id: Uuid) -> Option<GraphTriplet> {
         let subject = self.subject.as_ref()?.trim();

@@ -8,7 +8,7 @@
 //! Beyond that, use the Qdrant backend for proper ANN indexing.
 
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use mneme_core::*;
 use rusqlite::{params, params_from_iter, Connection};
 use std::sync::{Arc, Mutex};
@@ -43,9 +43,17 @@ impl SqliteEnvelopeIndex {
                  superseded_by TEXT,
                  summary TEXT NOT NULL,
                  tags TEXT NOT NULL DEFAULT '[]',
-                 content_hash INTEGER NOT NULL DEFAULT 0
+                 content_hash INTEGER NOT NULL DEFAULT 0,
+                 -- Valid time (when the fact was true in the world), as
+                 -- opposed to the transaction time already in created_at/
+                 -- updated_at. NULL valid_at means true from the beginning;
+                 -- NULL invalid_at means still true. See Envelope::is_valid_at.
+                 valid_at TEXT,
+                 invalid_at TEXT
              );
 
+             CREATE INDEX IF NOT EXISTS idx_envelopes_invalid_at
+                 ON envelopes(invalid_at);
              CREATE INDEX IF NOT EXISTS idx_envelopes_memory_type
                  ON envelopes(memory_type);
              CREATE INDEX IF NOT EXISTS idx_envelopes_superseded_by
@@ -77,6 +85,30 @@ impl SqliteEnvelopeIndex {
              );",
         )
         .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+
+        // `CREATE TABLE IF NOT EXISTS` is a no-op on a database that predates
+        // the valid-time columns, so opening an existing store would leave
+        // them missing and every query referencing them would fail. Add them
+        // if absent — both are nullable with no default, so existing rows
+        // read back as "valid for all time", which is the correct reading of
+        // "we never recorded a validity window for this fact".
+        let existing: Vec<String> = {
+            let mut stmt = conn
+                .prepare("PRAGMA table_info(envelopes)")
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            let cols = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            cols
+        };
+        for column in ["valid_at", "invalid_at"] {
+            if !existing.iter().any(|c| c == column) {
+                conn.execute_batch(&format!("ALTER TABLE envelopes ADD COLUMN {column} TEXT;"))
+                    .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            }
+        }
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -133,6 +165,13 @@ fn embedding_to_bytes(emb: &EmbeddingVec) -> Vec<u8> {
     emb.0.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 
+/// Parse a stored RFC3339 valid-time column. An unparseable value is treated
+/// as absent rather than as "now" — a bad timestamp must not silently make a
+/// fact look currently-invalid (or currently-valid) when we don't know.
+fn parse_opt_time(raw: Option<String>) -> Option<DateTime<Utc>> {
+    raw.and_then(|s| s.parse::<DateTime<Utc>>().ok())
+}
+
 fn bytes_to_embedding(bytes: &[u8]) -> EmbeddingVec {
     let floats = bytes
         .chunks_exact(4)
@@ -159,8 +198,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                 "INSERT OR REPLACE INTO envelopes
                  (id, embedding, confidence, created_at, updated_at, last_accessed_at,
                   access_count, memory_type, source_sessions, supersedes, superseded_by,
-                  summary, tags, content_hash)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+                  summary, tags, content_hash, valid_at, invalid_at)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
                 params![
                     id_str,
                     emb_bytes,
@@ -176,6 +215,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                     env.summary,
                     tags_json,
                     env.content_hash as i64,
+                    env.valid_at.map(|t| t.to_rfc3339()),
+                    env.invalid_at.map(|t| t.to_rfc3339()),
                 ],
             )
             .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
@@ -241,7 +282,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
             let sql = format!(
                 "SELECT id, embedding, confidence, created_at, updated_at,
                         last_accessed_at, access_count, memory_type, source_sessions,
-                        supersedes, superseded_by, summary, tags, content_hash
+                        supersedes, superseded_by, summary, tags, content_hash,
+                        valid_at, invalid_at
                  FROM envelopes
                  WHERE (?1 IS NULL OR superseded_by IS NULL)
                    AND (?2 IS NULL OR memory_type = ?2)
@@ -280,6 +322,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                 String,
                 String,
                 i64,
+                Option<String>,
+                Option<String>,
             )> = stmt
                 .query_map(
                     params_from_iter(param_values.iter().map(|b| b.as_ref())),
@@ -299,6 +343,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                             row.get::<_, String>(11)?,
                             row.get::<_, String>(12)?,
                             row.get::<_, i64>(13)?,
+                            row.get::<_, Option<String>>(14)?,
+                            row.get::<_, Option<String>>(15)?,
                         ))
                     },
                 )
@@ -378,6 +424,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                     summary,
                     tags_json,
                     content_hash,
+                    valid_at,
+                    invalid_at,
                 )| {
                     let embedding = bytes_to_embedding(&emb_bytes);
                     let similarity = embedding.cosine_similarity(&query.embedding);
@@ -400,6 +448,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                         summary,
                         tags: serde_json::from_str(&tags_json).unwrap_or_default(),
                         content_hash: content_hash as u64,
+                        valid_at: parse_opt_time(valid_at),
+                        invalid_at: parse_opt_time(invalid_at),
                     };
                     let recency = env.time_decay(0.05) as f32;
                     let retrieval_score =
@@ -411,6 +461,16 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                     }
                 },
             )
+            // Valid-time filter, applied here rather than in the SQL WHERE
+            // clause: this backend already scores every candidate row in the
+            // app layer (brute-force cosine), so filtering here costs nothing
+            // extra and keeps the semantics byte-identical to
+            // InMemoryEnvelopeIndex's `is_valid_at` rather than depending on
+            // lexicographic comparison of RFC3339 text columns.
+            .filter(|r| match query.as_of {
+                Some(as_of) => r.envelope.is_valid_at(as_of),
+                None => true,
+            })
             .collect();
 
         results.sort_by(|a, b| b.retrieval_score.partial_cmp(&a.retrieval_score).unwrap());
@@ -448,7 +508,7 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
             conn.query_row(
                 "SELECT id, embedding, confidence, created_at, updated_at, last_accessed_at,
                          access_count, memory_type, source_sessions, supersedes, superseded_by,
-                         summary, tags, content_hash
+                         summary, tags, content_hash, valid_at, invalid_at
                   FROM envelopes WHERE id = ?1",
                 params![id.to_string()],
                 |row| {
@@ -485,6 +545,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                         summary: row.get(11)?,
                         tags: serde_json::from_str(&row.get::<_, String>(12)?).unwrap_or_default(),
                         content_hash: row.get::<_, i64>(13)? as u64,
+                        valid_at: parse_opt_time(row.get::<_, Option<String>>(14)?),
+                        invalid_at: parse_opt_time(row.get::<_, Option<String>>(15)?),
                     })
                 },
             )
@@ -508,7 +570,7 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                 let env = conn.query_row(
                     "SELECT id, embedding, confidence, created_at, updated_at, last_accessed_at,
                              access_count, memory_type, source_sessions, supersedes, superseded_by,
-                             summary, tags, content_hash
+                             summary, tags, content_hash, valid_at, invalid_at, valid_at, invalid_at
                       FROM envelopes WHERE id = ?1",
                     params![id.to_string()],
                     |row| {
@@ -532,6 +594,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                             summary: row.get(11)?,
                             tags: serde_json::from_str(&row.get::<_, String>(12)?).unwrap_or_default(),
                             content_hash: row.get::<_, i64>(13)? as u64,
+                        valid_at: parse_opt_time(row.get::<_, Option<String>>(14)?),
+                        invalid_at: parse_opt_time(row.get::<_, Option<String>>(15)?),
                         })
                     },
                 )
@@ -557,7 +621,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                 .prepare(
                     "SELECT e.id, e.embedding, e.confidence, e.created_at, e.updated_at,
                         e.last_accessed_at, e.access_count, e.memory_type, e.source_sessions,
-                        e.supersedes, e.superseded_by, e.summary, e.tags, e.content_hash
+                        e.supersedes, e.superseded_by, e.summary, e.tags, e.content_hash,
+                        e.valid_at, e.invalid_at
                  FROM envelopes e, json_each(e.source_sessions) s
                  WHERE e.memory_type = 'Working'
                    AND s.value = ?1",
@@ -595,6 +660,8 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                         summary: row.get(11)?,
                         tags: serde_json::from_str(&row.get::<_, String>(12)?).unwrap_or_default(),
                         content_hash: row.get::<_, i64>(13)? as u64,
+                        valid_at: parse_opt_time(row.get::<_, Option<String>>(14)?),
+                        invalid_at: parse_opt_time(row.get::<_, Option<String>>(15)?),
                     })
                 })
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?
@@ -617,6 +684,27 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                     Utc::now().to_rfc3339(),
                     id.to_string()
                 ],
+            )
+            .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            Ok::<_, StoreError>(())
+        })
+        .await
+        .map_err(|e| StoreError::VectorIndex(e.to_string()))?
+    }
+
+    async fn invalidate(&self, id: Uuid, at: DateTime<Utc>) -> Result<(), StoreError> {
+        let conn = Arc::clone(&self.conn);
+        tokio::task::spawn_blocking(move || {
+            let conn = conn.lock().unwrap();
+            // MIN() so the earliest invalidation wins, matching
+            // Envelope::invalidate — a later contradiction must not extend a
+            // fact's validity window. MIN ignores NULL, so a first
+            // invalidation on a still-valid row simply takes the new value.
+            conn.execute(
+                "UPDATE envelopes
+                 SET invalid_at = MIN(COALESCE(invalid_at, ?1), ?1), updated_at = ?2
+                 WHERE id = ?3",
+                params![at.to_rfc3339(), Utc::now().to_rfc3339(), id.to_string()],
             )
             .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             Ok::<_, StoreError>(())

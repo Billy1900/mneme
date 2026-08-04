@@ -61,6 +61,16 @@ pub trait EnvelopeIndex: Send + Sync {
     async fn get_batch(&self, ids: &[Uuid]) -> Result<Vec<Envelope>, StoreError>;
     async fn list_working_memory(&self, session_id: &str) -> Result<Vec<Envelope>, StoreError>;
     async fn mark_superseded(&self, id: Uuid, successor: Uuid) -> Result<(), StoreError>;
+    /// Record that this engram's fact stopped being true at `at` (valid time).
+    ///
+    /// Distinct from `mark_superseded`: an invalidated engram is still the
+    /// correct answer to a question asked about an earlier instant, so it is
+    /// kept and filtered by `MemoryQuery::as_of` rather than deactivated.
+    async fn invalidate(
+        &self,
+        id: Uuid,
+        at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), StoreError>;
     async fn gc(&self, confidence_floor: f32, older_than_hours: u64) -> Result<usize, StoreError>;
     async fn delete(&self, id: Uuid) -> Result<(), StoreError>;
     async fn touch(&self, id: Uuid, new_confidence: f32) -> Result<(), StoreError>;

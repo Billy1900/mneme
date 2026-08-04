@@ -6,7 +6,7 @@
 //! For production at scale, use the Qdrant backend instead.
 
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use mneme_core::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -252,6 +252,11 @@ impl EnvelopeIndex for InMemoryEnvelopeIndex {
                 if query.active_only && !env.is_active() {
                     return false;
                 }
+                if let Some(as_of) = query.as_of {
+                    if !env.is_valid_at(as_of) {
+                        return false;
+                    }
+                }
                 if let Some(ref mt) = query.memory_type {
                     if env.memory_type != *mt {
                         return false;
@@ -352,6 +357,14 @@ impl EnvelopeIndex for InMemoryEnvelopeIndex {
         let mut store = self.envelopes.write().unwrap();
         let env = store.get_mut(&id).ok_or(StoreError::NotFound(id))?;
         env.superseded_by = Some(successor);
+        env.updated_at = Utc::now();
+        Ok(())
+    }
+
+    async fn invalidate(&self, id: Uuid, at: DateTime<Utc>) -> Result<(), StoreError> {
+        let mut store = self.envelopes.write().unwrap();
+        let env = store.get_mut(&id).ok_or(StoreError::NotFound(id))?;
+        env.invalidate(at);
         env.updated_at = Utc::now();
         Ok(())
     }

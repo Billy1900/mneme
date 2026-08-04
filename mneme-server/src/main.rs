@@ -412,6 +412,8 @@ async fn remember(
                 req.observation.hash(&mut h);
                 h.finish()
             },
+            valid_at: None,
+            invalid_at: None,
         },
         content: ContentBody {
             engram_id: id,
@@ -487,6 +489,7 @@ async fn recall(
         min_confidence: Some(0.1),
         recency_weight: 0.2,
         query_text: req.query.clone(),
+        as_of: Some(chrono::Utc::now()),
     };
 
     let results = state
@@ -693,6 +696,10 @@ async fn write_add_messages(
                     msg.content.hash(&mut h);
                     h.finish()
                 },
+                // A raw turn asserts nothing with a parsed validity window;
+                // valid time is set on the fact engrams distilled from it.
+                valid_at: None,
+                invalid_at: None,
             },
             content: ContentBody {
                 engram_id: id,
@@ -857,6 +864,12 @@ async fn write_extracted_facts(state: &SharedState, req: &AddRequest, uid_tag: &
                     text.hash(&mut h);
                     h.finish()
                 },
+                // The extractor reports the date the fact pertains to; where
+                // it's an unambiguous absolute date this becomes real valid
+                // time, so an `as_of` query can reason about when the fact
+                // held rather than only when it was written down.
+                valid_at: fact.valid_at(),
+                invalid_at: None,
             },
             content: ContentBody {
                 engram_id: id,
@@ -960,6 +973,18 @@ async fn search(
         min_confidence: None,
         recency_weight: 0.0,
         query_text: query_text.clone(),
+        // Answer from what is believed true *now*: a fact whose validity
+        // window was closed by conflict resolution is excluded, so a
+        // contradicted memory can't come back as evidence alongside the
+        // memory that replaced it.
+        //
+        // Caveat, deliberate: this also excludes a fact whose `valid_at` is
+        // in the future ("I start the new job in September"), since it isn't
+        // true yet. Those are rare — the extractor only sets valid time for
+        // unambiguous absolute dates, which are overwhelmingly past — but if
+        // a measured run shows recall lost on forward-looking questions, this
+        // is the line to revisit.
+        as_of: Some(chrono::Utc::now()),
     };
 
     let results = state

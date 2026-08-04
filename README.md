@@ -17,6 +17,7 @@ Every existing agent memory system treats memory as a **database problem**: stor
 | Context-dependent memory | Same person, different facts in different contexts | Overwrite or duplicate | Three conflict strategies: supersede, merge, coexist |
 | Progressive disclosure | Attention gates what enters working memory | Load everything into context | Metadata envelopes → summaries → full content |
 | Forgetting curve | Ebbinghaus exponential decay | No decay | Confidence decay with reinforcement on access |
+| Valid vs. encoding time | When an event happened ≠ when it was encoded | One creation timestamp | Bitemporal: `valid_at`/`invalid_at` alongside `created_at`/`updated_at` |
 
 ## Architecture
 
@@ -204,6 +205,7 @@ mneme/
 | **Storage** | Vector + KV + Graph | Temporal knowledge graph | Tiered (core/recall/archival) | Dual-system (working + semantic) |
 | **Reconsolidation** | No | No | No | Yes — drift-triggered on every retrieval |
 | **Conflict resolution** | Latest wins | No | No | 3 strategies: supersede, merge, coexist |
+| **Bitemporal validity** | No — creation timestamp only | Yes — `valid_at`/`invalid_at` on graph edges | No | Yes — valid time on every envelope, separate from transaction time |
 | **Progressive disclosure** | No — loads all matches | No | Agent pages manually | Yes — envelope → summary → full content |
 | **Consolidation** | Passive extraction | LLM entity extraction | Agent self-edits | LLM-powered embed → cluster → synthesize |
 | **Forgetting curve** | No | No | No | Yes — Ebbinghaus decay with reinforcement |

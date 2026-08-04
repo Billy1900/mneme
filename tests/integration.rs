@@ -78,6 +78,8 @@ mod tests {
                 summary: text[..text.len().min(80)].to_string(),
                 tags: vec![],
                 content_hash: 0,
+                valid_at: None,
+                invalid_at: None,
             },
             content: ContentBody {
                 engram_id: id,
@@ -129,6 +131,8 @@ mod tests {
                 summary: summary.to_string(),
                 tags: vec!["test".to_string()],
                 content_hash: 0,
+                valid_at: None,
+                invalid_at: None,
             },
             content: ContentBody {
                 engram_id: id,
@@ -455,6 +459,8 @@ mod tests {
                 summary: "tagged memory".to_string(),
                 tags: vec!["rust".to_string(), "systems".to_string()],
                 content_hash: 0,
+                valid_at: None,
+                invalid_at: None,
             },
             content: ContentBody {
                 engram_id: id,
@@ -624,6 +630,8 @@ mod tests {
                     summary: text.to_string(),
                     tags: vec!["uid:alice".to_string()],
                     content_hash: 0,
+                    valid_at: None,
+                    invalid_at: None,
                 },
                 content: ContentBody {
                     engram_id: id,
@@ -733,6 +741,8 @@ mod tests {
             summary: "decayable memory".to_string(),
             tags: vec![],
             content_hash: 0,
+            valid_at: None,
+            invalid_at: None,
         };
         store.upsert(&envelope).await.unwrap();
 
@@ -779,6 +789,8 @@ mod tests {
             summary: "sqlite test memory".to_string(),
             tags: vec!["test".to_string()],
             content_hash: 42,
+            valid_at: None,
+            invalid_at: None,
         };
 
         idx.upsert(&envelope).await.unwrap();
@@ -819,6 +831,8 @@ mod tests {
             summary: "searchable memory".to_string(),
             tags: vec![],
             content_hash: 0,
+            valid_at: None,
+            invalid_at: None,
         };
         idx.upsert(&envelope).await.unwrap();
 
@@ -866,6 +880,8 @@ mod tests {
             summary: "tagged sqlite memory".to_string(),
             tags: vec!["uid:alice".to_string()],
             content_hash: 0,
+            valid_at: None,
+            invalid_at: None,
         };
         idx.upsert(&envelope).await.unwrap();
 
@@ -936,6 +952,8 @@ mod tests {
                 summary: summary.to_string(),
                 tags: vec![],
                 content_hash: 0,
+                valid_at: None,
+                invalid_at: None,
             };
             idx.upsert(&envelope).await.unwrap();
         }
@@ -1000,6 +1018,8 @@ mod tests {
                 summary: summary.to_string(),
                 tags: vec![],
                 content_hash: 0,
+                valid_at: None,
+                invalid_at: None,
             }
         }
 
@@ -1052,6 +1072,8 @@ mod tests {
                 summary: summary.to_string(),
                 tags: vec![],
                 content_hash: 0,
+                valid_at: None,
+                invalid_at: None,
             }
         }
 
@@ -1099,6 +1121,8 @@ mod tests {
             summary: "deletable".to_string(),
             tags: vec![],
             content_hash: 0,
+            valid_at: None,
+            invalid_at: None,
         };
         idx.upsert(&envelope).await.unwrap();
         idx.delete(id).await.unwrap();
@@ -1133,6 +1157,8 @@ mod tests {
             summary: "decayable".to_string(),
             tags: vec![],
             content_hash: 0,
+            valid_at: None,
+            invalid_at: None,
         };
         idx.upsert(&envelope).await.unwrap();
 
@@ -1181,6 +1207,8 @@ mod tests {
                 summary: summary.to_string(),
                 tags: vec![],
                 content_hash: 0,
+                valid_at: None,
+                invalid_at: None,
             }
         }
 
@@ -1282,6 +1310,8 @@ mod tests {
                 summary: summary.to_string(),
                 tags: vec![],
                 content_hash: 0,
+                valid_at: None,
+                invalid_at: None,
             }
         }
 
@@ -1451,5 +1481,169 @@ mod tests {
         let restored = InMemoryGraphIndex::new();
         restored.insert(graph.all().await.unwrap()).await.unwrap();
         assert_eq!(restored.neighbors("Melanie", 1).await.unwrap().len(), 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Bitemporal validity (valid_at / invalid_at)
+    // ═══════════════════════════════════════════════════════════
+
+    fn at(y: i32, m: u32, d: u32) -> chrono::DateTime<chrono::Utc> {
+        chrono::NaiveDate::from_ymd_opt(y, m, d)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+    }
+
+    #[test]
+    fn test_unknown_validity_is_valid_for_all_time() {
+        let mut env = sample_envelope();
+        env.valid_at = None;
+        env.invalid_at = None;
+
+        // Most engrams carry no explicit valid time; treating those as
+        // "never valid" would filter away nearly the whole store.
+        assert!(env.is_valid_at(at(1999, 1, 1)));
+        assert!(env.is_valid_at(at(2030, 1, 1)));
+    }
+
+    #[test]
+    fn test_validity_window_bounds() {
+        let mut env = sample_envelope();
+        env.valid_at = Some(at(2023, 5, 8));
+        env.invalid_at = Some(at(2024, 1, 1));
+
+        assert!(!env.is_valid_at(at(2023, 5, 7)), "before it became true");
+        assert!(env.is_valid_at(at(2023, 5, 8)), "start is inclusive");
+        assert!(env.is_valid_at(at(2023, 12, 31)));
+        assert!(!env.is_valid_at(at(2024, 1, 1)), "end is exclusive");
+    }
+
+    #[test]
+    fn test_invalidate_keeps_earliest() {
+        let mut env = sample_envelope();
+        env.invalidate(at(2024, 6, 1));
+        env.invalidate(at(2025, 6, 1));
+        // A later contradiction must not extend a fact's validity window.
+        assert_eq!(env.invalid_at, Some(at(2024, 6, 1)));
+    }
+
+    #[tokio::test]
+    async fn test_as_of_filters_invalidated_engrams() {
+        use mneme_embed::EmbeddingModel;
+
+        let (store, _, embed, _) = build_test_system();
+        let stale =
+            insert_semantic_memory(&store, &embed, "Melanie is vegetarian", "vegetarian", 0.8)
+                .await;
+        insert_semantic_memory(&store, &embed, "Melanie eats meat", "eats meat", 0.8).await;
+
+        let changed_at = at(2024, 6, 1);
+        store.envelopes.invalidate(stale, changed_at).await.unwrap();
+
+        let query = |as_of| MemoryQuery {
+            embedding: EmbeddingVec(vec![]),
+            top_k: 10,
+            active_only: true,
+            as_of,
+            ..Default::default()
+        };
+
+        let embedding = embed.embed("Melanie diet").await.unwrap();
+        let run = |as_of| {
+            let mut q = query(as_of);
+            q.embedding = embedding.clone();
+            q
+        };
+
+        // No filter: both, unchanged from pre-bitemporal behaviour.
+        let all = store.search(&run(None)).await.unwrap();
+        assert!(all.iter().any(|r| r.envelope.id == stale));
+
+        // As of now: the contradicted fact is gone.
+        let current = store.search(&run(Some(chrono::Utc::now()))).await.unwrap();
+        assert!(
+            !current.iter().any(|r| r.envelope.id == stale),
+            "invalidated engram must not answer a question about the present"
+        );
+
+        // As of before the change: it is still the correct answer. This is
+        // the whole point of invalidation over supersession — the old fact
+        // was true then, and is not merely a wrong memory to be hidden.
+        let past = store.search(&run(Some(at(2024, 1, 1)))).await.unwrap();
+        assert!(past.iter().any(|r| r.envelope.id == stale));
+    }
+
+    #[test]
+    fn test_extracted_fact_valid_at_parsing() {
+        let fact = |date: Option<&str>| ExtractedFact {
+            text: "x".into(),
+            date: date.map(String::from),
+            subject: None,
+            relation: None,
+            object: None,
+        };
+
+        assert_eq!(fact(Some("2023-05-08")).valid_at(), Some(at(2023, 5, 8)));
+        assert_eq!(fact(Some("8 May 2023")).valid_at(), Some(at(2023, 5, 8)));
+        assert_eq!(fact(Some("May 8, 2023")).valid_at(), Some(at(2023, 5, 8)));
+        // Month-only resolves to the first of the month.
+        assert_eq!(fact(Some("May 2023")).valid_at(), Some(at(2023, 5, 1)));
+
+        // Relative expressions are deliberately NOT resolved: doing so needs
+        // the conversation's reference date, and guessing would write a
+        // confidently wrong timestamp into the validity window.
+        assert_eq!(fact(Some("last month")).valid_at(), None);
+        assert_eq!(fact(Some("yesterday")).valid_at(), None);
+        assert_eq!(fact(Some("")).valid_at(), None);
+        assert_eq!(fact(None).valid_at(), None);
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_valid_time_round_trip() {
+        use mneme_store::SqliteEnvelopeIndex;
+
+        let index = SqliteEnvelopeIndex::in_memory().unwrap();
+        let mut env = sample_envelope();
+        env.valid_at = Some(at(2023, 5, 8));
+        env.invalid_at = None;
+        index.upsert(&env).await.unwrap();
+
+        let back = index.get(env.id).await.unwrap();
+        assert_eq!(back.valid_at, Some(at(2023, 5, 8)));
+        assert_eq!(back.invalid_at, None);
+
+        index.invalidate(env.id, at(2024, 6, 1)).await.unwrap();
+        let back = index.get(env.id).await.unwrap();
+        assert_eq!(back.invalid_at, Some(at(2024, 6, 1)));
+
+        // Earliest invalidation wins, matching Envelope::invalidate.
+        index.invalidate(env.id, at(2025, 6, 1)).await.unwrap();
+        assert_eq!(
+            index.get(env.id).await.unwrap().invalid_at,
+            Some(at(2024, 6, 1))
+        );
+    }
+
+    fn sample_envelope() -> Envelope {
+        let now = chrono::Utc::now();
+        Envelope {
+            id: uuid::Uuid::new_v4(),
+            embedding: EmbeddingVec(vec![0.1, 0.2, 0.3]),
+            confidence: 0.7,
+            created_at: now,
+            updated_at: now,
+            last_accessed_at: now,
+            access_count: 0,
+            memory_type: MemoryType::Semantic,
+            source_sessions: vec!["s1".to_string()],
+            supersedes: vec![],
+            superseded_by: None,
+            summary: "sample".to_string(),
+            tags: vec![],
+            content_hash: 0,
+            valid_at: None,
+            invalid_at: None,
+        }
     }
 }

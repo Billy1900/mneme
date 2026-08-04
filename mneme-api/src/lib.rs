@@ -135,6 +135,10 @@ where
                     observation.hash(&mut h);
                     h.finish()
                 },
+                // A raw observation carries no parsed valid time — that comes
+                // from fact extraction on the /add path.
+                valid_at: None,
+                invalid_at: None,
             },
             content: ContentBody {
                 engram_id: id,
@@ -197,8 +201,7 @@ where
         // a chance to see both halves of the answer.
         let mut related_expansions: Vec<MnemeSummary> = Vec::new();
         for r in &results {
-            let (version, full_text, related) = match self.store.content.get(r.envelope.id).await
-            {
+            let (version, full_text, related) = match self.store.content.get(r.envelope.id).await {
                 Ok(body) => (body.version, body.full_text, body.related),
                 Err(_) => (1, r.envelope.summary.clone(), vec![]),
             };

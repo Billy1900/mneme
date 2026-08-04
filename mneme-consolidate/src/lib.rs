@@ -355,6 +355,10 @@ where
                     summary,
                     tags: carried_tags.to_vec(),
                     content_hash: seahash_str(&full_text),
+                    // Compaction synthesizes across turns; no single valid
+                    // time applies, so leave the window open.
+                    valid_at: None,
+                    invalid_at: None,
                 },
                 content: ContentBody {
                     engram_id: id,
@@ -448,6 +452,8 @@ Respond in JSON:
                 },
                 // FIX #11: compute actual hash instead of hardcoding 0
                 content_hash: seahash_str(&full_text),
+                valid_at: None,
+                invalid_at: None,
             },
             content: ContentBody {
                 engram_id: id,
@@ -734,6 +740,12 @@ Respond in JSON:
                         summary: new_summary,
                         tags: envelope.tags.clone(),
                         content_hash: seahash_str(&new_text),
+                        // Evolution refines the wording of the same fact, so
+                        // the fact's validity window is unchanged — carry the
+                        // existing valid time forward rather than resetting it
+                        // to "became true now".
+                        valid_at: envelope.valid_at,
+                        invalid_at: None,
                     },
                     content: ContentBody {
                         engram_id: id,
@@ -776,6 +788,17 @@ Respond in JSON:
                 let new_embedding = self.embed_model.embed(&new_text).await?;
                 let id = Uuid::new_v4();
                 let now = Utc::now();
+
+                // Close the contradicted fact's validity window. This is the
+                // half of the resolution that supersession alone can't
+                // express: "Melanie was vegetarian" is not a wrong memory to
+                // be hidden, it's a fact that stopped being true at a point
+                // in time — and it remains the correct answer to a question
+                // asked about an earlier date. Superseding it (below, via
+                // `supersedes`) hides it from active recall; invalidating it
+                // records *when* it ceased to hold, so an `as_of` query in
+                // the past can still find it.
+                self.store.envelopes.invalidate(envelope.id, now).await?;
                 let new_summary = if new_text.len() > 100 {
                     let cut = new_text
                         .char_indices()
@@ -804,6 +827,12 @@ Respond in JSON:
                         summary: new_summary,
                         tags: envelope.tags.clone(),
                         content_hash: seahash_str(&new_text),
+                        // A contradiction is a world-state change, not just a
+                        // rewording: the new fact becomes true at `now`, and
+                        // the one it contradicts stopped being true at the
+                        // same instant (invalidated on the old engram above).
+                        valid_at: Some(now),
+                        invalid_at: None,
                     },
                     content: ContentBody {
                         engram_id: id,
@@ -916,6 +945,8 @@ JSON:"#,
                     .to_string(),
                 tags: existing.tags.clone(),
                 content_hash: seahash_str(&full_text),
+                valid_at: None,
+                invalid_at: None,
             },
             content: ContentBody {
                 engram_id: id,

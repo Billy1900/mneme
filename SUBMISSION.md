@@ -250,6 +250,67 @@ pronoun-bound *"She is a golden retriever. Melanie and I picked her up in
 Denver."* Facts and graph triplets were confirmed to survive a `kill -9`
 restart via WAL replay.
 
+## Bitemporal validity (valid time vs transaction time)
+
+`Envelope` carries two time axes rather than one:
+
+- **Transaction time** — `created_at` / `updated_at`: when the system learned
+  or recorded something. Already present.
+- **Valid time** — `valid_at` / `invalid_at`: when the asserted fact was true
+  *in the world*. New.
+
+"Melanie adopted Cooper in May 2023", recorded today, has `valid_at` = May 2023
+and `created_at` = today. Keeping both is what makes *"what was true as of date
+X"* answerable, as distinct from *"what had we written down by date X"* — and
+temporal reasoning is one of the leaderboard's scored dimensions.
+
+**Invalidation is not supersession.** These were previously the same thing;
+they aren't:
+
+- `superseded_by` means "a newer *version* of this memory exists" — the old
+  one was a worse rendering of the same fact, and is hidden from active recall.
+- `invalid_at` means "this was true, and then it stopped being true". The old
+  engram is not a mistake; it is still the *correct* answer to a question asked
+  about an earlier date.
+
+Conflict resolution now does both: the contradicted engram is superseded (so it
+can't answer questions about the present) *and* invalidated at the moment of
+contradiction (so it can still answer questions about the past). "Melanie was
+vegetarian" doesn't become wrong when she starts eating meat — it acquires an
+end date.
+
+**Querying.** `MemoryQuery::as_of` filters on the valid-time axis:
+
+- `None` (the default) disables validity filtering entirely — every existing
+  caller behaves exactly as before, and dropping contradicted facts is an
+  explicit decision per call site rather than a silent global one.
+- `Some(Utc::now())` — what is believed true now. This is what `/search` and
+  `/recall` pass.
+- `Some(past_instant)` — what was believed true then.
+
+**Where valid time comes from.** Fact extraction already asks the model for the
+date a fact pertains to; `ExtractedFact::valid_at()` parses the unambiguous
+absolute forms ("2023-05-08", "8 May 2023", "May 8, 2023", "May 2023" → 1 May)
+into a real timestamp. Relative expressions ("last month", "yesterday") are
+deliberately **not** resolved — doing that correctly needs the conversation's
+own reference date, and guessing would write a confidently wrong timestamp into
+the validity window, which is worse than leaving it unknown. Raw turns and
+compacted engrams carry no valid time.
+
+**One deliberate caveat.** Because `/search` queries as of *now*, a fact whose
+`valid_at` is in the future ("I start the new job in September") is excluded —
+it isn't true yet. Those should be rare, since valid time is only set from
+unambiguous absolute dates, which are overwhelmingly past. If a measured run
+shows recall lost on forward-looking questions, that filter is the line to
+revisit; it's a single call site.
+
+**Storage.** Both columns are nullable and `#[serde(default)]`, so envelopes
+written before these fields existed still load from snapshots, WAL lines and
+Qdrant payloads, reading back as "valid for all time" — which is the correct
+interpretation of "we never recorded a validity window". The SQLite backend
+adds the columns via `ALTER TABLE` on open if they're missing, since
+`CREATE TABLE IF NOT EXISTS` is a no-op against a pre-existing database.
+
 ## Isolation and performance
 
 Multi-tenant isolation (`uid:{user_id}` tags) is backed by a tag → engram-id
