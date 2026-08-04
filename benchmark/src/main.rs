@@ -58,6 +58,27 @@ struct Args {
     #[arg(long, default_value_t = true)]
     judge: bool,
 
+    /// Skip LLM-as-judge scoring.
+    ///
+    /// `--judge` is a set-true flag that already defaults to true, so it can
+    /// never actually turn scoring off — this is the working off-switch.
+    /// Kept as a separate flag rather than making `--judge` take a value, so
+    /// existing scripts passing a bare `--judge` keep working.
+    #[arg(long)]
+    no_judge: bool,
+
+    /// Whether to distil each session's turns into atomic fact engrams
+    /// (`MnemeMemory::remember_facts`), the same step the HTTP `/add` path
+    /// runs.
+    ///
+    /// Takes an explicit value so an A/B is unambiguous in a script:
+    /// `--fact-extraction false` reproduces the pre-extraction system for an
+    /// ablation, against `--fact-extraction true` (the default, and what a
+    /// real submission does). Turning it off also skips one LLM call per
+    /// session, so an ablation run is cheaper as well as faster.
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    fact_extraction: bool,
+
     /// Output results JSON path
     #[arg(long, default_value = "results/run.json")]
     out: PathBuf,
@@ -125,6 +146,10 @@ async fn main() -> Result<()> {
     // independently — they answer to different constraints. The memory LLM is
     // part of the submitted system and must be gpt-4o-mini for a compliant
     // leaderboard run; the judge is local measurement machinery and is free.
+    // `--judge` defaults to true and can't be unset, so `--no-judge` is what
+    // actually disables scoring.
+    let use_judge = args.judge && !args.no_judge;
+
     let judge_backend = args.judge_llm.clone().unwrap_or_else(|| {
         // Judge defaults to the memory backend, which reproduces the old
         // single-`--llm` behaviour for anyone who passes only one flag.
@@ -173,7 +198,9 @@ async fn main() -> Result<()> {
     info!(
         memory_llm = ?args.memory_llm,
         judge_llm = ?judge_backend,
-        "LLM backends selected"
+        fact_extraction = args.fact_extraction,
+        judge = use_judge,
+        "Run configuration"
     );
 
     if let Some(parent) = args.out.parent() {
@@ -194,7 +221,14 @@ async fn main() -> Result<()> {
             info!("Loaded {} conversations", convs.len());
 
             let results = runner::run_locomo(
-                &convs, embed, llm, &judge, args.top_k, args.judge, args.limit,
+                &convs,
+                embed,
+                llm,
+                &judge,
+                args.top_k,
+                use_judge,
+                args.fact_extraction,
+                args.limit,
             )
             .await?;
             (results, "locomo")
@@ -210,7 +244,14 @@ async fn main() -> Result<()> {
             }
 
             let results = runner::run_longmemeval(
-                &items, embed, llm, &judge, args.top_k, args.judge, args.limit,
+                &items,
+                embed,
+                llm,
+                &judge,
+                args.top_k,
+                use_judge,
+                args.fact_extraction,
+                args.limit,
             )
             .await?;
             (results, "longmemeval")
@@ -234,10 +275,14 @@ async fn main() -> Result<()> {
         LlmBackend::Anthropic => "claude-haiku-4-5",
         LlmBackend::Openai => "gpt-4o-mini",
     };
+    // Fact extraction is recorded here too, so the two halves of an ablation
+    // pair are distinguishable from the results files alone rather than from
+    // whatever the shell history happened to be.
     let llm_name = &format!(
-        "memory={} judge={}",
+        "memory={} judge={} facts={}",
         backend_name(&args.memory_llm),
         backend_name(&judge_backend),
+        if args.fact_extraction { "on" } else { "off" },
     );
     let summary = metrics::aggregate(bench_name, embed_name, llm_name, results);
 

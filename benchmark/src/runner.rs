@@ -280,6 +280,7 @@ pub async fn run_locomo(
     judge: &LLMJudge,
     top_k: usize,
     use_judge: bool,
+    fact_extraction: bool,
     limit: Option<usize>,
 ) -> Result<Vec<QuestionResult>> {
     let convs = match limit {
@@ -331,12 +332,14 @@ pub async fn run_locomo(
             // One call per session rather than per turn: pronoun resolution
             // needs the surrounding turns, and the date prefix carried into
             // the window is what lets the extractor populate valid time.
-            if let Err(e) = session
-                .memory
-                .remember_facts(&window, &s.session_id, &[])
-                .await
-            {
-                warn!("fact extraction failed for {}: {e}", s.session_id);
+            if fact_extraction {
+                if let Err(e) = session
+                    .memory
+                    .remember_facts(&window, &s.session_id, &[])
+                    .await
+                {
+                    warn!("fact extraction failed for {}: {e}", s.session_id);
+                }
             }
 
             if let Err(e) = session.memory.end_session(&s.session_id).await {
@@ -440,6 +443,7 @@ pub async fn run_longmemeval(
     judge: &LLMJudge,
     top_k: usize,
     use_judge: bool,
+    fact_extraction: bool,
     limit: Option<usize>,
 ) -> Result<Vec<QuestionResult>> {
     let items = match limit {
@@ -486,12 +490,14 @@ pub async fn run_longmemeval(
 
                 // Same fact-extraction step as the /add path — see the note in
                 // `run_locomo`.
-                if let Err(e) = session
-                    .memory
-                    .remember_facts(&window, &session_id, &[])
-                    .await
-                {
-                    warn!("fact extraction failed for {session_id}: {e}");
+                if fact_extraction {
+                    if let Err(e) = session
+                        .memory
+                        .remember_facts(&window, &session_id, &[])
+                        .await
+                    {
+                        warn!("fact extraction failed for {session_id}: {e}");
+                    }
                 }
 
                 if let Err(e) = session.memory.end_session(&session_id).await {
