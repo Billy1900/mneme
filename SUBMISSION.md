@@ -188,6 +188,15 @@ Details:
 - **One LLM call per `/add` batch**, not per message — resolving "she" to a name
   requires the surrounding turns, so a per-message window would defeat the
   purpose as well as costing more.
+- **One code path.** The engram's shape — confidence, tags, memory type,
+  summary, valid time — comes from `mneme_api::build_fact_engrams`, called by
+  both this HTTP handler and `MnemeMemory::remember_facts` (the library path
+  the benchmark harness uses). Persistence stays layer-specific, since the
+  server has durability concerns the library doesn't (BM25 full-text
+  re-indexing, write-ahead log). This split exists because the logic
+  originally lived only in the `/add` handler while the benchmark went through
+  `MnemeMemory::remember`, so **the benchmark was measuring a system with no
+  fact extraction at all** — a parity test now pins the contract.
 - Facts are stored as **Semantic** engrams tagged `uid:{user_id}` and `fact`
   (plus `date:{...}` when the fact carries one). `/search` already queries both
   tiers, so facts surface alongside the turns they came from rather than

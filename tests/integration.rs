@@ -1646,4 +1646,130 @@ mod tests {
             invalid_at: None,
         }
     }
+
+    // ═══════════════════════════════════════════════════════════
+    // Fact-engram parity between the library and HTTP paths
+    // ═══════════════════════════════════════════════════════════
+
+    /// The shape of a fact engram must come from one place. It previously
+    /// lived only inside the HTTP `/add` handler while the benchmark went
+    /// through `MnemeMemory::remember`, so the benchmark silently measured a
+    /// system without fact extraction at all. Both paths now call
+    /// `build_fact_engrams`; this pins the contract it produces.
+    #[tokio::test]
+    async fn test_build_fact_engrams_shape() {
+        use mneme_api::build_fact_engrams;
+
+        let embed = MockEmbeddingModel::new(128);
+        let facts = vec![
+            ExtractedFact {
+                text: "Melanie adopted Cooper.".into(),
+                date: Some("8 May 2023".into()),
+                subject: Some("Melanie".into()),
+                relation: Some("adopted".into()),
+                object: Some("Cooper".into()),
+            },
+            ExtractedFact {
+                text: "   ".into(),
+                date: None,
+                subject: None,
+                relation: None,
+                object: None,
+            },
+        ];
+
+        let (engrams, triplets) =
+            build_fact_engrams(&facts, "s1", &["uid:u1".to_string()], "window", &embed)
+                .await
+                .unwrap();
+
+        // Blank facts are dropped, not stored as empty engrams.
+        assert_eq!(engrams.len(), 1);
+        let env = &engrams[0].envelope;
+
+        // Semantic so it surfaces alongside the turns it came from, at a
+        // confidence above a raw turn (0.5) but below a compacted engram.
+        assert_eq!(env.memory_type, MemoryType::Semantic);
+        assert_eq!(env.confidence, 0.6);
+        assert!(env.tags.contains(&"fact".to_string()));
+        assert!(env.tags.contains(&"uid:u1".to_string()));
+        assert!(env.tags.contains(&"date:8 May 2023".to_string()));
+
+        // Facts are short by construction — the summary is the whole fact,
+        // untruncated, so BM25 covers all of it.
+        assert_eq!(env.summary, "Melanie adopted Cooper.");
+        assert_eq!(engrams[0].content.full_text, "Melanie adopted Cooper.");
+
+        // The extractor's date became real valid time.
+        assert_eq!(
+            env.valid_at,
+            Some(
+                chrono::NaiveDate::from_ymd_opt(2023, 5, 8)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_utc()
+            )
+        );
+        assert_eq!(env.invalid_at, None);
+
+        // Provenance records the window the fact was distilled from.
+        assert_eq!(engrams[0].content.provenance[0].raw_excerpt, "window");
+
+        // The triplet points back at its engram, so graph traversal can
+        // resolve a hop into retrievable text.
+        assert_eq!(triplets.len(), 1);
+        assert_eq!(triplets[0].source_engram_id, env.id);
+    }
+
+    #[tokio::test]
+    async fn test_remember_facts_stores_searchable_engrams() {
+        use mneme_api::MnemeMemory;
+        use mneme_embed::EmbeddingModel;
+
+        let config = MnemeConfig::default();
+        let envelopes = InMemoryEnvelopeIndex::new();
+        let content = InMemoryContentStore::new();
+        let store = MnemeStore::new(envelopes.clone(), content.clone());
+        let engine = ConsolidationEngine::new(
+            MnemeStore::new(envelopes, content),
+            MockEmbeddingModel::new(128),
+            // Returns a well-formed fact list regardless of the prompt.
+            ScriptedLLM(
+                r#"{"facts": [{"text": "Melanie adopted Cooper.", "date": null, "subject": "Melanie", "relation": "adopted", "object": "Cooper"}]}"#
+                    .into(),
+            ),
+            config.clone(),
+        );
+        let memory = MnemeMemory::new(store, engine, MockEmbeddingModel::new(128), config);
+
+        let stored = memory
+            .remember_facts("user: I adopted Cooper", "s1", &[])
+            .await
+            .unwrap();
+        assert_eq!(stored, 1);
+
+        // An empty window costs no LLM call and stores nothing.
+        assert_eq!(memory.remember_facts("   ", "s1", &[]).await.unwrap(), 0);
+
+        // The fact is retrievable through the same search the benchmark uses.
+        let embedding = MockEmbeddingModel::new(128)
+            .embed("Who adopted Cooper?")
+            .await
+            .unwrap();
+        let results = memory
+            .store
+            .search(&MemoryQuery {
+                embedding,
+                top_k: 10,
+                active_only: true,
+                as_of: Some(chrono::Utc::now()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(results
+            .iter()
+            .any(|r| r.envelope.summary == "Melanie adopted Cooper."));
+    }
 }

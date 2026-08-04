@@ -50,6 +50,121 @@ pub struct MnemeDetail {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Fact engrams
+// ─────────────────────────────────────────────────────────────
+
+/// Turn extracted facts into engrams, plus the graph triplets they imply.
+///
+/// Deliberately has **no storage side effects**: it decides only what a fact
+/// engram *is* — confidence, tags, memory type, summary, valid time — and
+/// leaves persistence to the caller, because the two callers persist
+/// differently. The HTTP server upserts, re-indexes full text for BM25, and
+/// appends to a write-ahead log; the library path just inserts. Sharing the
+/// semantics here while letting each layer own its own durability is what
+/// stops the benchmark and the server from silently measuring different
+/// systems — which is exactly what happened when this logic lived only in the
+/// `/add` handler and the benchmark went through [`MnemeMemory::remember`].
+pub async fn build_fact_engrams<M: EmbeddingModel>(
+    facts: &[ExtractedFact],
+    session_id: &str,
+    tags: &[String],
+    provenance_window: &str,
+    embed_model: &M,
+) -> Result<(Vec<Engram>, Vec<GraphTriplet>), ConsolidateError> {
+    let mut engrams = Vec::new();
+    let mut triplets = Vec::new();
+
+    for fact in facts {
+        let text = fact.text.trim();
+        if text.is_empty() {
+            continue;
+        }
+
+        let embedding = match embed_model.embed(text).await {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to embed extracted fact; skipping");
+                continue;
+            }
+        };
+
+        let id = Uuid::new_v4();
+        let now = Utc::now();
+
+        let mut fact_tags = tags.to_vec();
+        fact_tags.push("fact".to_string());
+        if let Some(date) = fact
+            .date
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+        {
+            fact_tags.push(format!("date:{date}"));
+        }
+
+        engrams.push(Engram {
+            envelope: Envelope {
+                id,
+                embedding,
+                // Above a raw turn (0.5) — a fact has been through an explicit
+                // extraction step and is stated standalone — but below a
+                // compacted engram, since nothing has corroborated it across
+                // sessions yet.
+                confidence: 0.6,
+                created_at: now,
+                updated_at: now,
+                last_accessed_at: now,
+                access_count: 0,
+                // Semantic, not Working: a fact is distilled rather than raw,
+                // and search queries both tiers, so this surfaces alongside
+                // the turns it came from instead of replacing them.
+                memory_type: MemoryType::Semantic,
+                source_sessions: vec![session_id.to_string()],
+                supersedes: vec![],
+                superseded_by: None,
+                // Facts are short by construction, so the summary is the whole
+                // fact — no truncation, and BM25 covers it fully.
+                summary: text.to_string(),
+                tags: fact_tags,
+                content_hash: {
+                    use std::hash::{Hash, Hasher};
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    text.hash(&mut h);
+                    h.finish()
+                },
+                // Where the extractor reported an unambiguous absolute date,
+                // this becomes real valid time, so an `as_of` query can reason
+                // about when the fact held rather than only when it was
+                // written down.
+                valid_at: fact.valid_at(),
+                invalid_at: None,
+            },
+            content: ContentBody {
+                engram_id: id,
+                full_text: text.to_string(),
+                provenance: vec![ProvenanceRecord {
+                    session_id: session_id.to_string(),
+                    turn_id: None,
+                    timestamp: now,
+                    // The window the fact was distilled from, so `expand` can
+                    // show what it was actually derived from.
+                    raw_excerpt: provenance_window.to_string(),
+                }],
+                conflict_log: vec![],
+                related: vec![],
+                version: 1,
+            },
+        });
+
+        if let Some(triplet) = fact.as_triplet(id) {
+            triplets.push(triplet);
+        }
+    }
+
+    Ok((engrams, triplets))
+}
+
+// ─────────────────────────────────────────────────────────────
 // MnemeMemory — the main API struct
 // ─────────────────────────────────────────────────────────────
 
@@ -161,6 +276,57 @@ where
     }
 
     // ─────────────────────────────────────────────────────────
+    // remember_facts — distil a window of turns into fact engrams
+    // ─────────────────────────────────────────────────────────
+
+    /// Extract atomic facts from a window of raw conversation turns and store
+    /// each as its own searchable engram, alongside the entity-graph triplets
+    /// they imply.
+    ///
+    /// `window` should be the *whole* batch of turns, not one turn: resolving
+    /// "she" to a name needs the surrounding context, so a per-turn window
+    /// defeats the purpose as well as costing more LLM calls.
+    ///
+    /// Best-effort. Callers are expected to have already stored the raw turns
+    /// (via [`Self::remember`]), so an extraction failure — no LLM, API error,
+    /// unparseable response — leaves the caller exactly where it would have
+    /// been without this call rather than losing data. Returns how many fact
+    /// engrams were stored.
+    pub async fn remember_facts(
+        &self,
+        window: &str,
+        session_id: &str,
+        tags: &[String],
+    ) -> Result<usize, ConsolidateError> {
+        if window.trim().is_empty() {
+            return Ok(0);
+        }
+
+        let facts = self.engine.extract_facts(window).await?;
+        let (engrams, triplets) =
+            build_fact_engrams(&facts, session_id, tags, window, &self.embed_model).await?;
+
+        for engram in &engrams {
+            self.store.insert(engram).await?;
+        }
+        if !triplets.is_empty() {
+            if let Err(e) = self.engine.graph.insert(triplets).await {
+                // Graph coverage is an enhancement to recall, not a
+                // correctness requirement — the fact engrams themselves are
+                // already stored and searchable.
+                tracing::warn!(error = %e, "graph insert failed for extracted facts");
+            }
+        }
+
+        info!(
+            facts = engrams.len(),
+            session = session_id,
+            "Stored extracted fact engrams"
+        );
+        Ok(engrams.len())
+    }
+
+    // ─────────────────────────────────────────────────────────
     // recall
     // FIX #3: reconsolidation spawned via tokio::spawn
     // ─────────────────────────────────────────────────────────
@@ -179,6 +345,12 @@ where
             memory_type: Some(MemoryType::Semantic),
             min_confidence: Some(0.1),
             recency_weight: 0.2,
+            // Answer from what is believed true now, so a fact whose validity
+            // window was closed by conflict resolution can't come back as
+            // evidence alongside the memory that replaced it. Matches the
+            // HTTP layer's `/recall` and `/search`; see the note there on the
+            // future-dated-fact caveat.
+            as_of: Some(Utc::now()),
             ..Default::default()
         };
 

@@ -806,105 +806,43 @@ async fn write_extracted_facts(state: &SharedState, req: &AddRequest, uid_tag: &
         }
     };
 
-    let mut triplets = Vec::new();
-    for fact in &facts {
-        let text = fact.text.trim();
-        if text.is_empty() {
-            continue;
+    // Engram shape (confidence, tags, memory type, summary, valid time) comes
+    // from the shared builder in mneme-api, so the library/benchmark path and
+    // this HTTP path can't drift into measuring different systems. Persistence
+    // stays here, because this layer has durability concerns the library path
+    // doesn't: BM25 full-text re-indexing and the write-ahead log.
+    let (engrams, triplets) = match mneme_api::build_fact_engrams(
+        &facts,
+        &req.session_id,
+        &[uid_tag.to_string()],
+        &window,
+        &state.embed_model,
+    )
+    .await
+    {
+        Ok(built) => built,
+        Err(e) => {
+            tracing::warn!(error = %e, "building fact engrams failed; raw turns still stored");
+            return;
         }
+    };
 
-        let embedding = match state.embed_model.embed(text).await {
-            Ok(e) => e,
-            Err(e) => {
-                tracing::warn!(error = %e, "failed to embed extracted fact; skipping");
-                continue;
-            }
-        };
-
-        let id = Uuid::new_v4();
-        let now = chrono::Utc::now();
-
-        let mut tags = vec![uid_tag.to_string(), "fact".to_string()];
-        if let Some(date) = fact
-            .date
-            .as_deref()
-            .map(str::trim)
-            .filter(|d| !d.is_empty())
-        {
-            tags.push(format!("date:{date}"));
-        }
-
-        // Semantic, not Working: a fact is distilled rather than raw, and
-        // /search already queries both tiers, so this surfaces alongside the
-        // turns it came from instead of replacing them.
-        let engram = Engram {
-            envelope: Envelope {
-                id,
-                embedding,
-                // Above a raw turn (0.5) — a fact has been through an
-                // explicit extraction step and is stated standalone — but
-                // below a compacted engram, since nothing has corroborated
-                // it across sessions yet.
-                confidence: 0.6,
-                created_at: now,
-                updated_at: now,
-                last_accessed_at: now,
-                access_count: 0,
-                memory_type: MemoryType::Semantic,
-                source_sessions: vec![req.session_id.clone()],
-                supersedes: vec![],
-                superseded_by: None,
-                // Facts are short by construction, so the summary is the
-                // whole fact — no truncation, and BM25 covers it fully.
-                summary: text.to_string(),
-                tags,
-                content_hash: {
-                    use std::hash::{Hash, Hasher};
-                    let mut h = std::collections::hash_map::DefaultHasher::new();
-                    text.hash(&mut h);
-                    h.finish()
-                },
-                // The extractor reports the date the fact pertains to; where
-                // it's an unambiguous absolute date this becomes real valid
-                // time, so an `as_of` query can reason about when the fact
-                // held rather than only when it was written down.
-                valid_at: fact.valid_at(),
-                invalid_at: None,
-            },
-            content: ContentBody {
-                engram_id: id,
-                full_text: text.to_string(),
-                provenance: vec![ProvenanceRecord {
-                    session_id: req.session_id.clone(),
-                    turn_id: None,
-                    timestamp: now,
-                    // The window the fact was distilled from, so /expand can
-                    // show what it was actually derived from.
-                    raw_excerpt: window.clone(),
-                }],
-                conflict_log: vec![],
-                related: vec![],
-                version: 1,
-            },
-        };
+    let mut stored = 0;
+    for engram in engrams {
+        let id = engram.envelope.id;
+        let text = engram.content.full_text.clone();
 
         if let Err(e) = state.envelopes.upsert(&engram.envelope).await {
             tracing::warn!(error = %e, "failed to store extracted fact; skipping");
             continue;
         }
-        state.envelopes.index_full_text(id, text).await;
+        state.envelopes.index_full_text(id, &text).await;
         if let Err(e) = state.content.put(&engram.content).await {
             tracing::warn!(error = %e, "failed to store extracted fact body; skipping");
             continue;
         }
         wal_append(state, &WalEntry::Engram(engram)).await;
-
-        // The extractor returns the triplet decomposition in the same call,
-        // so graph coverage now comes from the write path rather than waiting
-        // on compaction to run.
-        if let Some(triplet) = fact.as_triplet(id) {
-            triplets.push(triplet);
-        }
+        stored += 1;
     }
 
     if !triplets.is_empty() {
@@ -915,7 +853,7 @@ async fn write_extracted_facts(state: &SharedState, req: &AddRequest, uid_tag: &
         }
     }
 
-    tracing::debug!(facts = facts.len(), "extracted facts stored");
+    tracing::debug!(facts = stored, "extracted facts stored");
 }
 
 async fn search(

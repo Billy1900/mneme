@@ -229,6 +229,10 @@ async fn recall_with_fallback(
         memory_type: None, // all types including Working
         min_confidence: Some(0.0),
         recency_weight: 0.1,
+        // Match the HTTP /search path: answer from what is believed true now,
+        // so a fact invalidated by conflict resolution can't come back as
+        // evidence alongside the memory that replaced it.
+        as_of: Some(chrono::Utc::now()),
         ..Default::default()
     };
 
@@ -306,6 +310,7 @@ pub async fn run_locomo(
             } else {
                 format!("[{}] ", s.session_date)
             };
+            let mut window = String::new();
             for turn in &s.turns {
                 if turn.trim().is_empty() {
                     continue;
@@ -314,7 +319,26 @@ pub async fn run_locomo(
                 if let Err(e) = session.memory.remember(&dated_turn, &s.session_id).await {
                     warn!("remember failed: {e}");
                 }
+                window.push_str(&dated_turn);
+                window.push('\n');
             }
+
+            // Distil the session's turns into atomic fact engrams, the same
+            // step the HTTP /add path runs. Without this the benchmark would
+            // measure raw turns plus compaction only — i.e. not the system
+            // that actually gets submitted.
+            //
+            // One call per session rather than per turn: pronoun resolution
+            // needs the surrounding turns, and the date prefix carried into
+            // the window is what lets the extractor populate valid time.
+            if let Err(e) = session
+                .memory
+                .remember_facts(&window, &s.session_id, &[])
+                .await
+            {
+                warn!("fact extraction failed for {}: {e}", s.session_id);
+            }
+
             if let Err(e) = session.memory.end_session(&s.session_id).await {
                 warn!("end_session failed for {}: {e}", s.session_id);
             }
@@ -448,6 +472,7 @@ pub async fn run_longmemeval(
                 let session = new_session(embed.clone(), llm, config);
                 let session_id = item.history_id.clone();
 
+                let mut window = String::new();
                 for turn in &item.turns {
                     if turn.trim().is_empty() {
                         continue;
@@ -455,7 +480,20 @@ pub async fn run_longmemeval(
                     if let Err(e) = session.memory.remember(turn, &session_id).await {
                         warn!("remember failed: {e}");
                     }
+                    window.push_str(turn);
+                    window.push('\n');
                 }
+
+                // Same fact-extraction step as the /add path — see the note in
+                // `run_locomo`.
+                if let Err(e) = session
+                    .memory
+                    .remember_facts(&window, &session_id, &[])
+                    .await
+                {
+                    warn!("fact extraction failed for {session_id}: {e}");
+                }
+
                 if let Err(e) = session.memory.end_session(&session_id).await {
                     warn!("end_session failed: {e}");
                 }
