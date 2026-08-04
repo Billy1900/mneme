@@ -189,6 +189,25 @@ pub struct RetrievalResult {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Graph triplet — entity-relation facts extracted from engram text,
+// enabling multi-hop traversal that pure vector similarity on decomposed
+// sub-queries can miss when the connecting fact wasn't retrieved directly.
+// ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphTriplet {
+    pub subject: String,
+    pub relation: String,
+    pub object: String,
+    /// Free-form date/time this fact pertains to, if any (e.g. from a
+    /// session's date-anchored turn). Not parsed/normalized.
+    pub date: Option<String>,
+    /// The engram this triplet was extracted from — traversal resolves
+    /// back to this id to pull the full text into a recall candidate.
+    pub source_engram_id: Uuid,
+}
+
+// ─────────────────────────────────────────────────────────────
 // Drift check result
 // ─────────────────────────────────────────────────────────────
 

@@ -187,12 +187,52 @@ where
         // (In the server layer the Arc<ConsolidationEngine> is passed instead)
 
         // FIX #16: read actual version from content store for each summary
+        let mut seen: std::collections::HashSet<Uuid> =
+            results.iter().map(|r| r.envelope.id).collect();
         let mut summaries = Vec::with_capacity(results.len());
+        // 1-hop expansion through `related` links (populated at compaction
+        // time for engrams synthesized from the same session): a fact that
+        // didn't score high enough on its own to make top_k can still ride
+        // in alongside a related fact that did, giving multi-hop questions
+        // a chance to see both halves of the answer.
+        let mut related_expansions: Vec<MnemeSummary> = Vec::new();
         for r in &results {
-            let (version, full_text) = match self.store.content.get(r.envelope.id).await {
-                Ok(body) => (body.version, body.full_text),
-                Err(_) => (1, r.envelope.summary.clone()),
+            let (version, full_text, related) = match self.store.content.get(r.envelope.id).await
+            {
+                Ok(body) => (body.version, body.full_text, body.related),
+                Err(_) => (1, r.envelope.summary.clone(), vec![]),
             };
+
+            for rel in &related {
+                if !seen.insert(rel.id) {
+                    continue;
+                }
+                let Ok(rel_envelope) = self.store.envelopes.get(rel.id).await else {
+                    continue;
+                };
+                if !rel_envelope.is_active() {
+                    continue;
+                }
+                let rel_full_text = self
+                    .store
+                    .content
+                    .get(rel.id)
+                    .await
+                    .map(|b| b.full_text)
+                    .unwrap_or_else(|_| rel_envelope.summary.clone());
+                related_expansions.push(MnemeSummary {
+                    id: rel_envelope.id,
+                    summary: rel_envelope.summary.clone(),
+                    full_text: rel_full_text,
+                    confidence: rel_envelope.confidence,
+                    tags: rel_envelope.tags.clone(),
+                    similarity: r.similarity * rel.strength,
+                    retrieval_score: r.retrieval_score * rel.strength,
+                    version: 1,
+                    is_evolved: !rel_envelope.supersedes.is_empty(),
+                });
+            }
+
             summaries.push(MnemeSummary {
                 id: r.envelope.id,
                 summary: r.envelope.summary.clone(),
@@ -205,6 +245,7 @@ where
                 is_evolved: !r.envelope.supersedes.is_empty(),
             });
         }
+        summaries.extend(related_expansions);
 
         Ok(summaries)
     }

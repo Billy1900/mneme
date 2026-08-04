@@ -15,6 +15,7 @@ use mneme_core::*;
 use std::sync::Arc;
 use uuid::Uuid;
 
+pub mod graph;
 pub mod memory;
 pub mod memory_content;
 
@@ -23,6 +24,7 @@ pub mod sqlite_content;
 #[cfg(feature = "sqlite")]
 pub mod sqlite_envelope;
 
+pub use graph::{GraphIndex, InMemoryGraphIndex};
 pub use memory::InMemoryEnvelopeIndex;
 pub use memory_content::InMemoryContentStore;
 

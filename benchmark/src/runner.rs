@@ -1,10 +1,14 @@
 use anyhow::Result;
 use futures::stream::{self, StreamExt};
 use mneme_api::{MnemeMemory, MnemeSummary};
-use mneme_consolidate::{AnthropicLLM, ConsolidationEngine, ConsolidationLLM, OpenAILLM};
+use mneme_consolidate::{
+    AnthropicLLM, ConsolidationEngine, ConsolidationLLM, DeepSeekLLM, OpenAILLM,
+};
 use mneme_core::{MemoryQuery, MnemeConfig};
-use mneme_embed::{backends::OpenAIEmbeddingModel, EmbeddingModel};
-use mneme_store::{EnvelopeIndex, InMemoryContentStore, InMemoryEnvelopeIndex, MnemeStore};
+use mneme_embed::EmbeddingModel;
+use mneme_store::{
+    ContentStore, EnvelopeIndex, InMemoryContentStore, InMemoryEnvelopeIndex, MnemeStore,
+};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
@@ -20,11 +24,64 @@ use crate::datasets::{LoCoMoConversation, LongMemEvalItem};
 use crate::judge::LLMJudge;
 use crate::metrics::{self, QuestionResult};
 
+/// Extract entities from the question and traverse the entity-relation graph
+/// (built from triplets extracted at compaction time) out 2 hops, pulling in
+/// the source engram of every triplet touched. Catches facts that connect to
+/// the question's entities but didn't score high enough on any sub-query's
+/// vector similarity to be retrieved directly.
+async fn recall_graph(session: &Session, judge: &LLMJudge, question: &str) -> Vec<MnemeSummary> {
+    let entities = match judge.extract_entities(question).await {
+        Ok(e) => e,
+        Err(e) => {
+            warn!("entity extraction failed: {e}");
+            return vec![];
+        }
+    };
+    if entities.is_empty() {
+        return vec![];
+    }
+
+    let mut source_ids: HashSet<Uuid> = HashSet::new();
+    for entity in &entities {
+        match session.memory.engine.graph.neighbors(entity, 2).await {
+            Ok(triplets) => source_ids.extend(triplets.into_iter().map(|t| t.source_engram_id)),
+            Err(e) => warn!("graph neighbors failed: {e}"),
+        }
+    }
+
+    let mut out = Vec::with_capacity(source_ids.len());
+    for id in source_ids {
+        let envelope = match session.memory.store.envelopes.get(id).await {
+            Ok(e) if e.is_active() => e,
+            _ => continue,
+        };
+        let full_text = match session.memory.store.content.get(id).await {
+            Ok(c) => c.full_text,
+            Err(_) => envelope.summary.clone(),
+        };
+        out.push(MnemeSummary {
+            id: envelope.id,
+            summary: envelope.summary.clone(),
+            full_text,
+            confidence: envelope.confidence,
+            tags: envelope.tags.clone(),
+            // Neutral score — graph hits are a distinct evidence channel from
+            // vector similarity, not directly comparable to it. Merged and
+            // left to the reranker rather than competing on retrieval_score.
+            similarity: 0.5,
+            retrieval_score: 0.5,
+            version: 1,
+            is_evolved: !envelope.supersedes.is_empty(),
+        });
+    }
+    out
+}
+
 /// Decompose question into sub-queries, recall for each in parallel, merge and deduplicate.
 /// Falls back to single-query recall if decomposition fails or returns one item.
 async fn recall_multihop(
     session: &Session,
-    embed: &OpenAIEmbeddingModel,
+    embed: &Arc<dyn EmbeddingModel>,
     judge: &LLMJudge,
     question: &str,
     top_k: usize,
@@ -37,20 +94,29 @@ async fn recall_multihop(
         }
     };
 
-    if sub_qs.len() <= 1 {
-        return recall_with_fallback(session, embed, question, top_k).await;
-    }
+    let is_multihop = sub_qs.len() > 1;
+    let queries: Vec<String> = if is_multihop {
+        sub_qs
+    } else {
+        vec![question.to_string()]
+    };
 
     // Recall for each sub-query in parallel, then merge deduped by id
     let per_sub = top_k.max(3);
-    let mut all: Vec<MnemeSummary> = stream::iter(sub_qs.iter())
+    let mut all: Vec<MnemeSummary> = stream::iter(queries.iter())
         .map(|sq| async move { recall_with_fallback(session, embed, sq, per_sub).await })
-        .buffer_unordered(sub_qs.len())
+        .buffer_unordered(queries.len())
         .collect::<Vec<_>>()
         .await
         .into_iter()
         .flatten()
         .collect();
+
+    // Graph traversal only pays for itself on genuinely multi-hop questions —
+    // single-hop ones already get a direct vector hit from recall_with_fallback.
+    if is_multihop {
+        all.extend(recall_graph(session, judge, question).await);
+    }
 
     // Deduplicate by id, preserving first occurrence (highest score per sub-query)
     let mut seen: HashSet<Uuid> = HashSet::new();
@@ -91,6 +157,7 @@ async fn rerank(
 pub enum ConsolidationLlm {
     Anthropic(AnthropicLLM),
     OpenAI(OpenAILLM),
+    DeepSeek(DeepSeekLLM),
 }
 
 // Blanket so we can pass ConsolidationLlm anywhere ConsolidationLLM is needed via dispatch.
@@ -98,7 +165,7 @@ pub enum ConsolidationLlm {
 type BenchMemory = MnemeMemory<
     InMemoryEnvelopeIndex,
     InMemoryContentStore,
-    OpenAIEmbeddingModel,
+    Arc<dyn EmbeddingModel>,
     Box<dyn ConsolidationLLM>,
 >;
 
@@ -107,7 +174,7 @@ struct Session {
     envelopes: Arc<InMemoryEnvelopeIndex>,
 }
 
-fn new_session(embed: OpenAIEmbeddingModel, llm: ConsolidationLlm, config: MnemeConfig) -> Session {
+fn new_session(embed: Arc<dyn EmbeddingModel>, llm: ConsolidationLlm, config: MnemeConfig) -> Session {
     let envelopes = Arc::new(InMemoryEnvelopeIndex::new());
     let content = Arc::new(InMemoryContentStore::new());
 
@@ -117,6 +184,7 @@ fn new_session(embed: OpenAIEmbeddingModel, llm: ConsolidationLlm, config: Mneme
     let boxed: Box<dyn ConsolidationLLM> = match llm {
         ConsolidationLlm::Anthropic(a) => Box::new(a),
         ConsolidationLlm::OpenAI(o) => Box::new(o),
+        ConsolidationLlm::DeepSeek(d) => Box::new(d),
     };
     let engine = ConsolidationEngine::new(engine_store, embed.clone(), boxed, config.clone());
     let memory = MnemeMemory::new(api_store, engine, embed, config);
@@ -128,7 +196,7 @@ fn new_session(embed: OpenAIEmbeddingModel, llm: ConsolidationLlm, config: Mneme
 /// Compaction loses fine-grained facts; raw working-memory turns fill the gap.
 async fn recall_with_fallback(
     session: &Session,
-    embed: &OpenAIEmbeddingModel,
+    embed: &Arc<dyn EmbeddingModel>,
     query: &str,
     top_k: usize,
 ) -> Vec<MnemeSummary> {
@@ -199,7 +267,7 @@ async fn recall_with_fallback(
 
 pub async fn run_locomo(
     conversations: &[LoCoMoConversation],
-    embed: OpenAIEmbeddingModel,
+    embed: Arc<dyn EmbeddingModel>,
     llm: ConsolidationLlm,
     judge: &LLMJudge,
     top_k: usize,
@@ -225,13 +293,21 @@ pub async fn run_locomo(
 
         let session = new_session(embed.clone(), llm.clone(), config.clone());
 
-        // Ingest sessions — store turns clean for accurate embeddings.
+        // Ingest sessions, prefixing each turn with its session date so relative
+        // time references ("last Saturday") can be resolved against an absolute
+        // anchor instead of being lost — LoCoMo's ground truth answers are dates.
         for s in &conv.sessions {
+            let date_prefix = if s.session_date.trim().is_empty() {
+                String::new()
+            } else {
+                format!("[{}] ", s.session_date)
+            };
             for turn in &s.turns {
                 if turn.trim().is_empty() {
                     continue;
                 }
-                if let Err(e) = session.memory.remember(turn, &s.session_id).await {
+                let dated_turn = format!("{date_prefix}{turn}");
+                if let Err(e) = session.memory.remember(&dated_turn, &s.session_id).await {
                     warn!("remember failed: {e}");
                 }
             }
@@ -257,7 +333,7 @@ pub async fn run_locomo(
                     let _permit = sem.acquire().await.unwrap();
                     let t0 = Instant::now();
                     let candidates =
-                        recall_with_fallback(&session, &embed_ref, &q.question, 15).await;
+                        recall_multihop(&session, &embed_ref, &judge_ref, &q.question, 15).await;
                     let summaries = rerank(&judge_ref, &q.question, candidates, top_k).await;
                     let latency_ms = t0.elapsed().as_millis() as u64;
 
@@ -331,7 +407,7 @@ pub async fn run_locomo(
 
 pub async fn run_longmemeval(
     items: &[LongMemEvalItem],
-    embed: OpenAIEmbeddingModel,
+    embed: Arc<dyn EmbeddingModel>,
     llm: ConsolidationLlm,
     judge: &LLMJudge,
     top_k: usize,

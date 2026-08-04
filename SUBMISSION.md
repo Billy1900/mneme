@@ -198,6 +198,48 @@ cap, and validation — alongside the pre-existing `/remember`, `/recall`,
 auth, and `/gc`/`/decay` coverage. 23 tests in that file, 53 across the
 workspace.
 
+## Multi-hop retrieval and consolidation improvements
+
+Three changes to the core consolidation/recall pipeline (`mneme-consolidate`,
+`mneme-api`, `mneme-store`), aimed at multi-hop question answering, where a
+single vector-similarity pass tends to surface only one of several facts a
+question needs combined:
+
+- **Entity-relation graph.** `ConsolidationEngine::compact_session` now
+  extracts `(subject, relation, object, date)` triplets from each newly
+  synthesized engram via the LLM and adds them to an in-memory graph index
+  (`mneme-store/src/graph.rs`, `GraphIndex`/`InMemoryGraphIndex`), keyed off
+  the engram it came from. A question's named entities can then be traversed
+  2 hops out to pull in connected facts that didn't score high enough on
+  their own to be a direct vector hit.
+- **`related[]` engram linking.** Engrams synthesized from the same
+  compaction batch are now linked to each other (`RelatedEngram`,
+  previously an unused field on `ContentBody`). `MnemeMemory::recall`
+  (`mneme-api`) does a 1-hop expansion through these links before returning
+  results.
+- **Reconsolidation conflict resolution.** Previously a detected `CONFLICT`
+  during reconsolidation just decayed the stale memory's confidence and left
+  it active, so a contradicted fact could keep resurfacing in recall. It now
+  supersedes the old engram (excluded from active recall via
+  `Envelope::is_active`) with a new one reflecting the current context, and
+  logs a `ConflictRecord` with the LLM's reasoning — history stays
+  traceable via the existing `supersedes` chain.
+
+These were validated against the LoCoMo multi-hop category via the
+`benchmark` crate (DeepSeek `deepseek-v4-flash` + local embeddings): a small
+sample (n=63, 2 conversations) went from judge score 0.067 to 0.151 after
+adding graph traversal, though a full 321-question run to confirm this at
+scale is still pending.
+
+**Caveat:** the graph traversal and `related[]` expansion are consumed by
+`benchmark`'s `recall_multihop`/`MnemeMemory::recall` path, not yet by
+`mneme-server`'s `/recall` or `/search` handlers, which query
+`state.envelopes.search()` directly rather than going through
+`MnemeMemory`. The reconsolidation conflict fix, by contrast, is in the
+consolidation engine itself and does apply to the server. Wiring graph
+traversal into `/search` is the natural next step if multi-hop performance
+matters for the leaderboard evaluation.
+
 ## Known limitations
 
 These are open items, not blockers for a smoke test, but relevant to reviewers

@@ -210,6 +210,104 @@ impl ConsolidationLLM for OpenAILLM {
 }
 
 // ─────────────────────────────────────────────────────────────
+// DeepSeek LLM (OpenAI-compatible chat/completions API)
+// ─────────────────────────────────────────────────────────────
+
+#[derive(Clone)]
+pub struct DeepSeekLLM {
+    api_key: String,
+    model: String,
+    client: reqwest::Client,
+}
+
+impl DeepSeekLLM {
+    pub fn new(api_key: String) -> Self {
+        Self {
+            api_key,
+            model: "deepseek-v4-flash".to_string(),
+            client: build_client(),
+        }
+    }
+
+    pub fn with_model(api_key: String, model: &str) -> Self {
+        Self {
+            api_key,
+            model: model.to_string(),
+            client: build_client(),
+        }
+    }
+}
+
+/// DeepSeek's endpoint occasionally accepts a connection and then never
+/// responds (observed hang with zero bytes received, indefinitely). A bare
+/// `reqwest::Client::new()` has no timeout, so a request can wedge forever;
+/// bound it so callers can retry instead of hanging the whole pipeline.
+fn build_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .expect("failed to build reqwest client")
+}
+
+#[async_trait]
+impl ConsolidationLLM for DeepSeekLLM {
+    async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
+        let body = serde_json::json!({
+            "model": self.model,
+            "max_tokens": 512,
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"},
+        });
+
+        let response = self
+            .client
+            .post("https://api.deepseek.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "unknown error".to_string());
+            return Err(ConsolidateError::LLM(format!(
+                "DeepSeek API error {}: {}",
+                status, body
+            )));
+        }
+
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
+
+        let text = data["choices"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|c| c["message"]["content"].as_str())
+            .ok_or_else(|| ConsolidateError::LLM("no content in response".into()))?;
+
+        let cleaned = text
+            .trim()
+            .strip_prefix("```json")
+            .unwrap_or(text.trim())
+            .strip_prefix("```")
+            .unwrap_or(text.trim())
+            .strip_suffix("```")
+            .unwrap_or(text.trim())
+            .trim()
+            .to_string();
+
+        Ok(cleaned)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Ollama LLM (local, no API key)
 // ─────────────────────────────────────────────────────────────
 

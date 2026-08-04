@@ -10,16 +10,28 @@ fn strip_json_fences(s: &str) -> &str {
     s.trim()
 }
 
-/// POST to OpenAI with up to 4 retries on 429, doubling delay each time.
-async fn openai_post_with_retry(
+/// DeepSeek's endpoint occasionally accepts a connection and never responds
+/// (observed hang, zero bytes, indefinitely). A bare `Client::new()` has no
+/// timeout, so bound it here so a hang surfaces as a retryable error instead
+/// of wedging the whole benchmark run.
+fn build_client() -> Client {
+    Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .expect("failed to build reqwest client")
+}
+
+/// POST to the chat-completions endpoint with up to 4 retries on 429, doubling delay each time.
+async fn chat_post_with_retry(
     client: &Client,
+    base_url: &str,
     api_key: &str,
     body: &serde_json::Value,
 ) -> Result<serde_json::Value> {
     let mut delay = Duration::from_secs(5);
     for attempt in 0..=3 {
         let resp = client
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(base_url)
             .header("Authorization", format!("Bearer {api_key}"))
             .header("Content-Type", "application/json")
             .json(body)
@@ -33,16 +45,18 @@ async fn openai_post_with_retry(
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
-            return Err(anyhow!("OpenAI error {status}: {text}"));
+            return Err(anyhow!("chat API error {status}: {text}"));
         }
         return Ok(resp.json().await?);
     }
-    Err(anyhow!("OpenAI request failed after retries"))
+    Err(anyhow!("chat API request failed after retries"))
 }
 
 pub struct LLMJudge {
     client: Client,
     api_key: String,
+    /// Chat-completions endpoint (OpenAI-compatible wire format).
+    base_url: String,
     /// Strong model for answer generation and judge scoring.
     model_strong: String,
     /// Cheap model for high-volume reranking and decomposition.
@@ -52,10 +66,23 @@ pub struct LLMJudge {
 impl LLMJudge {
     pub fn new(api_key: String) -> Self {
         Self {
-            client: Client::new(),
+            client: build_client(),
             api_key,
+            base_url: "https://api.openai.com/v1/chat/completions".to_string(),
             model_strong: "gpt-4o".to_string(),
             model_fast: "gpt-4o-mini".to_string(),
+        }
+    }
+
+    /// DeepSeek's chat/completions API is OpenAI wire-compatible. DeepSeek only
+    /// ships one general-purpose chat model, so strong/fast both map to it.
+    pub fn new_deepseek(api_key: String) -> Self {
+        Self {
+            client: build_client(),
+            api_key,
+            base_url: "https://api.deepseek.com/v1/chat/completions".to_string(),
+            model_strong: "deepseek-v4-flash".to_string(),
+            model_fast: "deepseek-v4-flash".to_string(),
         }
     }
 
@@ -83,7 +110,8 @@ Respond ONLY with JSON: {{"score": 0.0|0.5|1.0, "reason": "one sentence"}}"#
             "messages": [{"role": "user", "content": prompt}],
         });
 
-        let data = openai_post_with_retry(&self.client, &self.api_key, &body).await?;
+        let data =
+            chat_post_with_retry(&self.client, &self.base_url, &self.api_key, &body).await?;
         let content = data["choices"]
             .as_array()
             .and_then(|a| a.first())
@@ -131,7 +159,7 @@ Respond ONLY with JSON: {{"score": 0.0|0.5|1.0, "reason": "one sentence"}}"#
 
         let resp = self
             .client
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(&self.base_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&body)
@@ -176,6 +204,7 @@ Respond ONLY with JSON: {{"score": 0.0|0.5|1.0, "reason": "one sentence"}}"#
     pub async fn generate_answer(&self, question: &str, memory_context: &str) -> Result<String> {
         let prompt = format!(
             r#"You have access to memory summaries about a person or situation.
+Each memory may be prefixed with the date it was recorded, like "[8 May, 2023] ...".
 
 Memory context:
 {memory_context}
@@ -183,6 +212,10 @@ Memory context:
 Based ONLY on the above memories, answer this question concisely:
 {question}
 
+If the question asks for a date or time and a memory expresses it relative to
+its own recorded date (e.g. "last Saturday", "in 3 years"), resolve it to an
+absolute date using that memory's date prefix. Never output the "[date]"
+prefix bracket itself — only the resolved answer.
 If the memories do not contain the answer, say "Not found in memory".
 Give only the answer, no explanation."#
         );
@@ -193,7 +226,8 @@ Give only the answer, no explanation."#
             "messages": [{"role": "user", "content": prompt}],
         });
 
-        let data = openai_post_with_retry(&self.client, &self.api_key, &body).await?;
+        let data =
+            chat_post_with_retry(&self.client, &self.base_url, &self.api_key, &body).await?;
         let content = data["choices"]
             .as_array()
             .and_then(|a| a.first())
@@ -227,7 +261,7 @@ Respond ONLY with a JSON array of strings (1-3 items), e.g.:
 
         let resp = self
             .client
-            .post("https://api.openai.com/v1/chat/completions")
+            .post(&self.base_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&body)
@@ -259,5 +293,42 @@ Respond ONLY with a JSON array of strings (1-3 items), e.g.:
         } else {
             Ok(sub_qs)
         }
+    }
+
+    /// Extract the entity names (people, places, organizations) mentioned or
+    /// implied in a question, to seed graph traversal.
+    pub async fn extract_entities(&self, question: &str) -> Result<Vec<String>> {
+        let prompt = format!(
+            r#"Question: {question}
+
+List the named entities (people, places, organizations — not dates or generic
+nouns) mentioned or implied in this question. Respond ONLY with a JSON array
+of strings, e.g. ["Alice", "Acme Corp"]. If there are none, return []."#
+        );
+
+        let body = serde_json::json!({
+            "model": self.model_fast,
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": prompt}],
+        });
+
+        let resp = self
+            .client
+            .post(&self.base_url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        let data: serde_json::Value = resp.json().await?;
+        let content = data["choices"]
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|c| c["message"]["content"].as_str())
+            .unwrap_or("[]");
+
+        let cleaned = strip_json_fences(content);
+        Ok(serde_json::from_str(cleaned).unwrap_or_default())
     }
 }

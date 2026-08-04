@@ -11,11 +11,12 @@ use chrono::Utc;
 use mneme_core::*;
 use mneme_embed::{agglomerative_cluster, EmbeddingModel};
 use mneme_store::*;
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 pub mod backends;
-pub use backends::{AnthropicLLM, MockLLM, OllamaLLM, OpenAILLM};
+pub use backends::{AnthropicLLM, DeepSeekLLM, MockLLM, OllamaLLM, OpenAILLM};
 
 #[async_trait]
 pub trait ConsolidationLLM: Send + Sync {
@@ -60,6 +61,10 @@ where
     L: ConsolidationLLM,
 {
     pub store: MnemeStore<E, C>,
+    /// Entity-relation graph built from compacted engram text. Behind a
+    /// trait object (same pattern as `Arc<dyn EmbeddingModel>`) so it isn't
+    /// a 5th generic parameter threaded through every caller.
+    pub graph: Arc<dyn GraphIndex>,
     embed_model: M,
     llm: L,
     config: MnemeConfig,
@@ -90,6 +95,23 @@ where
     pub fn new(store: MnemeStore<E, C>, embed_model: M, llm: L, config: MnemeConfig) -> Self {
         Self {
             store,
+            graph: Arc::new(InMemoryGraphIndex::new()),
+            embed_model,
+            llm,
+            config,
+        }
+    }
+
+    pub fn with_graph(
+        store: MnemeStore<E, C>,
+        embed_model: M,
+        llm: L,
+        config: MnemeConfig,
+        graph: Arc<dyn GraphIndex>,
+    ) -> Self {
+        Self {
+            store,
+            graph,
             embed_model,
             llm,
             config,
@@ -192,6 +214,27 @@ where
             new_engrams.push(engram);
         }
 
+        // Link every engram synthesized from this compaction batch to its
+        // batch-mates. Facts distilled from the same session tend to be the
+        // ones a multi-hop question needs combined (e.g. "who" + "when"
+        // clustered separately but co-occurring in one conversation) — this
+        // gives recall a graph hop to follow instead of relying solely on
+        // each sub-query's vector similarity happening to surface both.
+        if new_engrams.len() > 1 {
+            let batch_ids: Vec<Uuid> = new_engrams.iter().map(|e| e.envelope.id).collect();
+            for engram in &mut new_engrams {
+                engram.content.related = batch_ids
+                    .iter()
+                    .filter(|&&id| id != engram.envelope.id)
+                    .map(|&id| RelatedEngram {
+                        id,
+                        relationship: RelationType::Related,
+                        strength: 0.5,
+                    })
+                    .collect();
+            }
+        }
+
         for engram in &new_engrams {
             self.store.insert(engram).await?;
             for old_id in &engram.envelope.supersedes {
@@ -199,6 +242,27 @@ where
                     .envelopes
                     .mark_superseded(*old_id, engram.envelope.id)
                     .await?;
+            }
+        }
+
+        // Extract entity-relation triplets from each newly synthesized
+        // engram and add them to the graph, so multi-hop recall can
+        // traverse from an entity named in the question to a connected fact
+        // even when that fact didn't score high enough on its own to be a
+        // vector-similarity hit. Best-effort: extraction failures don't
+        // fail compaction, they just mean that engram stays graph-invisible.
+        for engram in &new_engrams {
+            match self
+                .extract_triplets(&engram.content.full_text, engram.envelope.id)
+                .await
+            {
+                Ok(triplets) if !triplets.is_empty() => {
+                    if let Err(e) = self.graph.insert(triplets).await {
+                        warn!("graph insert failed: {e}");
+                    }
+                }
+                Ok(_) => {}
+                Err(e) => warn!("triplet extraction failed: {e}"),
             }
         }
 
@@ -352,6 +416,69 @@ Respond in JSON:
                 version: 1,
             },
         })
+    }
+
+    /// Extract (subject, relation, object, date) triplets from a synthesized
+    /// engram's text via the LLM. Cheap, targeted extraction — not a full
+    /// NER/RE pipeline — deliberately kept to explicit factual relations
+    /// rather than every noun pair.
+    async fn extract_triplets(
+        &self,
+        text: &str,
+        source_engram_id: Uuid,
+    ) -> Result<Vec<GraphTriplet>, ConsolidateError> {
+        let prompt = format!(
+            r#"Extract factual (subject, relation, object) triplets from this text.
+
+Text:
+{text}
+
+Rules:
+1. Only extract explicit, factual relations (e.g. "works at", "lives in", "is married to", "prefers", "happened on").
+2. Subject and object should be short entity names or noun phrases, not full sentences.
+3. If the text carries a date/time this fact pertains to (e.g. a "[8 May, 2023]" prefix), put it in "date"; otherwise null.
+4. Return at most 5 triplets. If there are no clear factual relations, return an empty array.
+
+Respond ONLY with a JSON array, e.g.:
+[{{"subject": "Alice", "relation": "works at", "object": "Acme Corp", "date": null}}]"#
+        );
+
+        let response = self
+            .llm
+            .complete(&prompt)
+            .await
+            .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
+
+        let cleaned = response
+            .trim()
+            .strip_prefix("```json")
+            .unwrap_or(response.trim())
+            .strip_prefix("```")
+            .unwrap_or(response.trim())
+            .strip_suffix("```")
+            .unwrap_or(response.trim())
+            .trim();
+
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(cleaned).unwrap_or_default();
+
+        Ok(parsed
+            .into_iter()
+            .filter_map(|v| {
+                let subject = v["subject"].as_str()?.trim().to_string();
+                let relation = v["relation"].as_str()?.trim().to_string();
+                let object = v["object"].as_str()?.trim().to_string();
+                if subject.is_empty() || relation.is_empty() || object.is_empty() {
+                    return None;
+                }
+                Some(GraphTriplet {
+                    subject,
+                    relation,
+                    object,
+                    date: v["date"].as_str().map(String::from),
+                    source_engram_id,
+                })
+            })
+            .collect())
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -508,13 +635,82 @@ Respond in JSON:
             }
             "conflict" => {
                 warn!(engram_id = %envelope.id, "Conflict detected during reconsolidation");
-                // For now: keep memory, reduce confidence
-                let new_confidence = (envelope.confidence - 0.1).clamp(0.0, 1.0);
-                self.store
-                    .envelopes
-                    .touch(envelope.id, new_confidence)
-                    .await?;
-                Ok(None)
+                let reasoning = parsed["reasoning"]
+                    .as_str()
+                    .unwrap_or("no reasoning given")
+                    .to_string();
+
+                // Previously this just decayed the stale memory's confidence
+                // and left it active, so a contradicted fact kept resurfacing
+                // in recall alongside (or instead of) the truth. Now the new
+                // context wins: supersede the old engram (excluded from
+                // active recall via is_active()) and record what it
+                // contradicted, mirroring the "update" evolve/supersede path
+                // above instead of a dead-end confidence nudge.
+                let decayed = (envelope.confidence * (1.0 - self.config.conflict_loser_decay))
+                    .clamp(0.0, 1.0);
+                self.store.envelopes.touch(envelope.id, decayed).await?;
+
+                let new_text = current_context.to_string();
+                let new_embedding = self.embed_model.embed(&new_text).await?;
+                let id = Uuid::new_v4();
+                let now = Utc::now();
+                let new_summary = if new_text.len() > 100 {
+                    let cut = new_text
+                        .char_indices()
+                        .map(|(i, _)| i)
+                        .take_while(|&i| i <= 97)
+                        .last()
+                        .unwrap_or(0);
+                    format!("{}...", &new_text[..cut])
+                } else {
+                    new_text.clone()
+                };
+
+                Ok(Some(Engram {
+                    envelope: Envelope {
+                        id,
+                        embedding: new_embedding,
+                        confidence: 0.6,
+                        created_at: now,
+                        updated_at: now,
+                        last_accessed_at: now,
+                        access_count: 0,
+                        memory_type: MemoryType::Semantic,
+                        source_sessions: envelope.source_sessions.clone(),
+                        supersedes: vec![envelope.id],
+                        superseded_by: None,
+                        summary: new_summary,
+                        tags: envelope.tags.clone(),
+                        content_hash: seahash_str(&new_text),
+                    },
+                    content: ContentBody {
+                        engram_id: id,
+                        full_text: new_text,
+                        provenance: {
+                            let mut p = content.provenance.clone();
+                            p.push(ProvenanceRecord {
+                                session_id: "reconsolidation-conflict".to_string(),
+                                turn_id: None,
+                                timestamp: now,
+                                raw_excerpt: current_context.to_string(),
+                            });
+                            p
+                        },
+                        conflict_log: {
+                            let mut log = content.conflict_log.clone();
+                            log.push(ConflictRecord {
+                                conflicting_id: envelope.id,
+                                resolution: ConflictStrategy::TemporalSupersede,
+                                resolved_at: now,
+                                resolver_notes: reasoning,
+                            });
+                            log
+                        },
+                        related: content.related.clone(),
+                        version: content.version + 1,
+                    },
+                }))
             }
             _ => Ok(None), // "keep"
         }
