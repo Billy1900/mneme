@@ -23,6 +23,56 @@ pub trait ConsolidationLLM: Send + Sync {
     async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError>;
 }
 
+/// Strip a markdown code fence from an LLM response, if present.
+///
+/// Models wrap JSON in ```json ... ``` roughly at random no matter how the
+/// prompt is worded, and a fenced response parses to nothing — which for the
+/// extractors here degrades silently into "this turn had no facts" rather
+/// than an error, so it's worth handling rather than hoping.
+fn strip_code_fence(response: &str) -> String {
+    let trimmed = response.trim();
+    let Some(after_open) = trimmed.strip_prefix("```") else {
+        return trimmed.to_string();
+    };
+    // The opening fence may carry a language tag (```json); drop that line.
+    let body = match after_open.split_once('\n') {
+        Some((_lang, rest)) => rest,
+        None => after_open,
+    };
+    body.trim()
+        .strip_suffix("```")
+        .unwrap_or(body)
+        .trim()
+        .to_string()
+}
+
+/// Parse an extractor response into a list of items, accepting either a bare
+/// top-level JSON array or an object wrapping one under `key`.
+///
+/// Both shapes have to work. Providers with a strict JSON mode — DeepSeek's
+/// `response_format: json_object` is the one in use here — can only emit a
+/// top-level *object*, and asking one for a bare array yields an empty
+/// completion rather than an error. Providers without that constraint
+/// generally return the array as asked. Accepting both means the prompt can
+/// request the object form for strict-mode compatibility without breaking
+/// backends that answer with a plain array anyway.
+fn parse_extraction_list(response: &str, key: &str) -> Result<Vec<serde_json::Value>, String> {
+    let cleaned = strip_code_fence(response);
+    let value: serde_json::Value =
+        serde_json::from_str(&cleaned).map_err(|e| format!("{e} (response: {cleaned})"))?;
+
+    match value {
+        serde_json::Value::Array(items) => Ok(items),
+        serde_json::Value::Object(map) => match map.get(key) {
+            Some(serde_json::Value::Array(items)) => Ok(items.clone()),
+            // An object with no list under `key` is how a model says "nothing
+            // to extract" in strict JSON mode, so it's empty rather than an error.
+            _ => Ok(vec![]),
+        },
+        _ => Err(format!("expected array or object, got: {cleaned}")),
+    }
+}
+
 #[async_trait]
 impl ConsolidationLLM for Box<dyn ConsolidationLLM> {
     async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
@@ -418,6 +468,84 @@ Respond in JSON:
         })
     }
 
+    /// Extract atomic, self-contained facts from a window of raw conversation
+    /// turns, on the write path.
+    ///
+    /// This exists because neither of the two things `/add` already stores is
+    /// a good retrieval target. Raw turns are context-dependent — "yeah, I
+    /// switched last month" embeds nothing a later query can match. Compacted
+    /// semantic engrams are cluster summaries, and benchmarking showed
+    /// compaction drops exactly the fine-grained specifics (names, numbers,
+    /// dates) that recall questions ask about. A fact is the missing middle
+    /// layer: one assertion, pronouns resolved against the surrounding turns,
+    /// dates carried through.
+    ///
+    /// One call per `/add` batch rather than per message — the surrounding
+    /// turns are what make pronoun resolution possible, so splitting the
+    /// window would defeat the point as well as costing more.
+    ///
+    /// The same call also returns an optional (subject, relation, object)
+    /// decomposition, so entity-graph coverage comes free instead of needing a
+    /// second round-trip through [`Self::extract_triplets`].
+    pub async fn extract_facts(
+        &self,
+        conversation: &str,
+    ) -> Result<Vec<ExtractedFact>, ConsolidateError> {
+        let prompt = format!(
+            r#"Extract the atomic facts stated in this conversation excerpt.
+
+Conversation:
+{conversation}
+
+Rules:
+1. Each fact must be ONE self-contained sentence that stands alone without the conversation. Resolve every pronoun to the named person or thing ("she moved to Denver" -> "Melanie moved to Denver").
+2. Extract only what is actually asserted. Do not infer, summarize across facts, or add commentary.
+3. Preserve specifics verbatim — names, numbers, places, quantities. These are what later questions ask about.
+4. If a fact carries a date or time (including one from a "[8 May, 2023]" style prefix on a turn), put it in "date"; otherwise null.
+5. Also decompose each fact into "subject"/"relation"/"object" where there is a clean entity relation; use null for all three where there isn't.
+6. Skip pleasantries, greetings, and questions — facts only.
+7. Return at most 12 facts. If the excerpt asserts nothing factual, return an empty list.
+
+Respond ONLY with a JSON object containing a "facts" list, e.g.:
+{{"facts": [{{"text": "Melanie adopted a golden retriever named Cooper in May 2023.", "date": "May 2023", "subject": "Melanie", "relation": "adopted", "object": "golden retriever named Cooper"}}]}}"#
+        );
+
+        let response = self
+            .llm
+            .complete(&prompt)
+            .await
+            .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
+
+        let parsed = match parse_extraction_list(&response, "facts") {
+            Ok(p) => p,
+            Err(e) => {
+                // A malformed response is indistinguishable from "this batch
+                // asserted nothing" at the call site, so log the actual text —
+                // it's the only way to tell a prompt/model problem apart from
+                // a genuinely factless excerpt.
+                warn!(error = %e, "fact extraction: unparseable response");
+                return Ok(vec![]);
+            }
+        };
+
+        Ok(parsed
+            .into_iter()
+            .filter_map(|v| {
+                let text = v["text"].as_str()?.trim().to_string();
+                if text.is_empty() {
+                    return None;
+                }
+                Some(ExtractedFact {
+                    text,
+                    date: v["date"].as_str().map(String::from),
+                    subject: v["subject"].as_str().map(String::from),
+                    relation: v["relation"].as_str().map(String::from),
+                    object: v["object"].as_str().map(String::from),
+                })
+            })
+            .collect())
+    }
+
     /// Extract (subject, relation, object, date) triplets from a synthesized
     /// engram's text via the LLM. Cheap, targeted extraction — not a full
     /// NER/RE pipeline — deliberately kept to explicit factual relations
@@ -437,10 +565,10 @@ Rules:
 1. Only extract explicit, factual relations (e.g. "works at", "lives in", "is married to", "prefers", "happened on").
 2. Subject and object should be short entity names or noun phrases, not full sentences.
 3. If the text carries a date/time this fact pertains to (e.g. a "[8 May, 2023]" prefix), put it in "date"; otherwise null.
-4. Return at most 5 triplets. If there are no clear factual relations, return an empty array.
+4. Return at most 5 triplets. If there are no clear factual relations, return an empty list.
 
-Respond ONLY with a JSON array, e.g.:
-[{{"subject": "Alice", "relation": "works at", "object": "Acme Corp", "date": null}}]"#
+Respond ONLY with a JSON object containing a "triplets" list, e.g.:
+{{"triplets": [{{"subject": "Alice", "relation": "works at", "object": "Acme Corp", "date": null}}]}}"#
         );
 
         let response = self
@@ -449,17 +577,10 @@ Respond ONLY with a JSON array, e.g.:
             .await
             .map_err(|e| ConsolidateError::LLM(e.to_string()))?;
 
-        let cleaned = response
-            .trim()
-            .strip_prefix("```json")
-            .unwrap_or(response.trim())
-            .strip_prefix("```")
-            .unwrap_or(response.trim())
-            .strip_suffix("```")
-            .unwrap_or(response.trim())
-            .trim();
-
-        let parsed: Vec<serde_json::Value> = serde_json::from_str(cleaned).unwrap_or_default();
+        let parsed = parse_extraction_list(&response, "triplets").unwrap_or_else(|e| {
+            warn!(error = %e, "triplet extraction: unparseable response");
+            vec![]
+        });
 
         Ok(parsed
             .into_iter()

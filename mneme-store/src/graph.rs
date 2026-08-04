@@ -20,6 +20,11 @@ pub trait GraphIndex: Send + Sync {
     /// subject or object) out to `hops` edges. Returns every triplet touched,
     /// deduplicated.
     async fn neighbors(&self, entity: &str, hops: usize) -> Result<Vec<GraphTriplet>, StoreError>;
+
+    /// Every triplet currently held, for snapshotting. The graph is derived
+    /// data, but re-deriving it means re-running LLM extraction over the whole
+    /// corpus, so it's cheaper to persist than to rebuild after a restart.
+    async fn all(&self) -> Result<Vec<GraphTriplet>, StoreError>;
 }
 
 #[derive(Clone, Default)]
@@ -52,6 +57,14 @@ impl GraphIndex for InMemoryGraphIndex {
             .map_err(|_| StoreError::DocumentStore("graph lock poisoned".into()))?;
         store.extend(triplets);
         Ok(())
+    }
+
+    async fn all(&self) -> Result<Vec<GraphTriplet>, StoreError> {
+        let store = self
+            .triplets
+            .read()
+            .map_err(|_| StoreError::DocumentStore("graph lock poisoned".into()))?;
+        Ok(store.clone())
     }
 
     async fn neighbors(&self, entity: &str, hops: usize) -> Result<Vec<GraphTriplet>, StoreError> {

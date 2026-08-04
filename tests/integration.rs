@@ -9,7 +9,7 @@
 
 #[cfg(test)]
 mod tests {
-    use mneme_consolidate::{ConsolidationEngine, MockLLM};
+    use mneme_consolidate::{ConsolidateError, ConsolidationEngine, MockLLM};
     use mneme_core::*;
     use mneme_embed::MockEmbeddingModel;
     use mneme_store::*;
@@ -639,7 +639,11 @@ mod tests {
         }
 
         let compacted = engine.compact_session("s1").await.unwrap();
-        assert_eq!(compacted.len(), 1, "identical text should cluster into one engram");
+        assert_eq!(
+            compacted.len(),
+            1,
+            "identical text should cluster into one engram"
+        );
         let synthesized = &compacted[0];
         assert!(
             synthesized.envelope.tags.contains(&"uid:alice".to_string()),
@@ -661,7 +665,9 @@ mod tests {
             .await
             .unwrap();
         assert!(
-            results.iter().any(|r| r.envelope.id == synthesized.envelope.id),
+            results
+                .iter()
+                .any(|r| r.envelope.id == synthesized.envelope.id),
             "tag-filtered search must find the post-compaction engram"
         );
     }
@@ -1331,5 +1337,119 @@ mod tests {
             "session-12 query must not bleed into session-1"
         );
         assert_eq!(s12_results[0].source_sessions, vec!["session-12"]);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Fact extraction (write path)
+    // ═══════════════════════════════════════════════════════════
+
+    /// An LLM that always returns one canned response, so extraction parsing
+    /// can be tested against the exact shapes real models emit.
+    struct ScriptedLLM(String);
+
+    #[async_trait::async_trait]
+    impl mneme_consolidate::ConsolidationLLM for ScriptedLLM {
+        async fn complete(&self, _prompt: &str) -> Result<String, ConsolidateError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    fn engine_with_llm(
+        response: &str,
+    ) -> ConsolidationEngine<
+        InMemoryEnvelopeIndex,
+        InMemoryContentStore,
+        MockEmbeddingModel,
+        ScriptedLLM,
+    > {
+        let store = MnemeStore::new(InMemoryEnvelopeIndex::new(), InMemoryContentStore::new());
+        ConsolidationEngine::new(
+            store,
+            MockEmbeddingModel::new(128),
+            ScriptedLLM(response.to_string()),
+            MnemeConfig::default(),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_extract_facts_parses_fields() {
+        let engine = engine_with_llm(
+            r#"[{"text": "Melanie adopted a golden retriever named Cooper.", "date": "May 2023", "subject": "Melanie", "relation": "adopted", "object": "Cooper"},
+                {"text": "Melanie lives in Denver.", "date": null, "subject": null, "relation": null, "object": null}]"#,
+        );
+
+        let facts = engine.extract_facts("...").await.unwrap();
+        assert_eq!(facts.len(), 2);
+        assert_eq!(
+            facts[0].text,
+            "Melanie adopted a golden retriever named Cooper."
+        );
+        assert_eq!(facts[0].date.as_deref(), Some("May 2023"));
+        assert_eq!(facts[1].date, None);
+    }
+
+    #[tokio::test]
+    async fn test_extract_facts_tolerates_code_fence() {
+        // Models wrap JSON in a fence regardless of prompt wording, and an
+        // unhandled fence would parse to zero facts — silently degrading to
+        // "this batch asserted nothing" rather than erroring.
+        let engine = engine_with_llm(
+            "```json\n[{\"text\": \"Cooper is a golden retriever.\", \"date\": null, \"subject\": \"Cooper\", \"relation\": \"is a\", \"object\": \"golden retriever\"}]\n```",
+        );
+
+        let facts = engine.extract_facts("...").await.unwrap();
+        assert_eq!(facts.len(), 1);
+        assert_eq!(facts[0].text, "Cooper is a golden retriever.");
+    }
+
+    #[tokio::test]
+    async fn test_extract_facts_unparseable_response_is_empty_not_error() {
+        // /add treats extraction as best-effort on top of already-durable raw
+        // turns, so a garbage response must not surface as a failed write.
+        let engine = engine_with_llm("I'm sorry, I can't help with that.");
+        assert!(engine.extract_facts("...").await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_extracted_fact_to_triplet() {
+        let engine = engine_with_llm(
+            r#"[{"text": "Melanie works at Acme.", "date": null, "subject": "Melanie", "relation": "works at", "object": "Acme"},
+                {"text": "It was a nice day.", "date": null, "subject": null, "relation": null, "object": null},
+                {"text": "Blank subject.", "date": null, "subject": "  ", "relation": "x", "object": "y"}]"#,
+        );
+
+        let facts = engine.extract_facts("...").await.unwrap();
+        let source = uuid::Uuid::new_v4();
+        let triplets: Vec<_> = facts.iter().filter_map(|f| f.as_triplet(source)).collect();
+
+        // Only the fact with a complete, non-blank decomposition becomes an
+        // edge — a partial triplet would poison graph traversal.
+        assert_eq!(triplets.len(), 1);
+        assert_eq!(triplets[0].subject, "Melanie");
+        assert_eq!(triplets[0].object, "Acme");
+        assert_eq!(triplets[0].source_engram_id, source);
+    }
+
+    #[tokio::test]
+    async fn test_graph_all_round_trips_for_snapshot() {
+        let graph = InMemoryGraphIndex::new();
+        let source = uuid::Uuid::new_v4();
+        graph
+            .insert(vec![GraphTriplet {
+                subject: "Melanie".into(),
+                relation: "works at".into(),
+                object: "Acme".into(),
+                date: None,
+                source_engram_id: source,
+            }])
+            .await
+            .unwrap();
+
+        // What the snapshot writes must be re-insertable into a fresh graph
+        // and still traversable — otherwise a restart silently loses every
+        // edge and multi-hop recall degrades to vector search alone.
+        let restored = InMemoryGraphIndex::new();
+        restored.insert(graph.all().await.unwrap()).await.unwrap();
+        assert_eq!(restored.neighbors("Melanie", 1).await.unwrap().len(), 1);
     }
 }

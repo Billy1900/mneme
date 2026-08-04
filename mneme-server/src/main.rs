@@ -30,7 +30,9 @@ use axum::{
     Router,
 };
 use mneme_api::{ContextBuilder, MnemeSummary};
-use mneme_consolidate::{AnthropicLLM, ConsolidationEngine, ConsolidationLLM, MockLLM, OllamaLLM};
+use mneme_consolidate::{
+    AnthropicLLM, ConsolidationEngine, ConsolidationLLM, DeepSeekLLM, MockLLM, OllamaLLM, OpenAILLM,
+};
 use mneme_core::*;
 use mneme_embed::{EmbeddingModel, LocalEmbeddingModel, MockEmbeddingModel, OpenAIEmbeddingModel};
 use mneme_store::*;
@@ -70,6 +72,16 @@ pub struct AppState {
     /// evicted by age (see `ADD_SEEN_TTL_HOURS`) so it doesn't grow
     /// unbounded over a long-running evaluation.
     add_seen: tokio::sync::Mutex<std::collections::HashMap<String, AddSeenEntry>>,
+    /// Whether `/add` distils raw turns into atomic fact engrams via the LLM
+    /// (see `write_extracted_facts`). On by default; set
+    /// `MNEME_FACT_EXTRACTION=0` to store raw turns only. Forced off when the
+    /// LLM backend is `MockLLM`, which would otherwise fill the store with
+    /// placeholder "facts" that dilute retrieval.
+    fact_extraction: bool,
+    /// Ceiling on the fact-extraction LLM call, from
+    /// `MNEME_FACT_EXTRACTION_TIMEOUT_SECS`. See
+    /// `DEFAULT_FACT_EXTRACTION_TIMEOUT_SECS`.
+    fact_extraction_timeout_secs: u64,
     /// Set from MNEME_SNAPSHOT_PATH. `None` means fully in-memory — no
     /// snapshot, no write-ahead log, a restart loses everything.
     snapshot_path: Option<String>,
@@ -245,6 +257,17 @@ struct AddSeenEntry {
 /// long-running (72h) evaluation without dropping a dedup entry a real
 /// retry might still need.
 const ADD_SEEN_TTL_HOURS: i64 = 24;
+
+/// Default ceiling on the fact-extraction LLM call inside `/add`. The
+/// leaderboard harness retries Add on 408, so a hung extraction must not be
+/// allowed to stall the request — past this the batch's raw turns (already
+/// written) are the response, and the facts are simply skipped.
+///
+/// 30s suits the mandated gpt-4o-mini. Reasoning models need considerably
+/// more (DeepSeek V4 measured well past this on the extraction prompt, since
+/// it thinks for thousands of tokens before emitting anything), so this is
+/// overridable via `MNEME_FACT_EXTRACTION_TIMEOUT_SECS`.
+const DEFAULT_FACT_EXTRACTION_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Deserialize)]
 struct SearchRequest {
@@ -709,7 +732,177 @@ async fn write_add_messages(
         wal_append(state, &WalEntry::Engram(engram)).await;
     }
 
+    write_extracted_facts(state, req, uid_tag).await;
+
     Ok(())
+}
+
+/// Distil the batch's raw turns into atomic facts and store each as its own
+/// searchable engram.
+///
+/// Benchmarking put the case for this plainly: recall over raw turns alone
+/// scored 0.388 on LoCoMo, because a turn like "yeah, I switched last month"
+/// embeds nothing a later question can match, and the compaction layer that
+/// was supposed to fix that summarizes at cluster level and drops the exact
+/// names, numbers and dates the questions ask about. Facts sit between the
+/// two — one self-contained assertion each, which is a retrievable unit.
+///
+/// Best-effort by design. The raw turns are already durably written and
+/// searchable by the time this runs, so every failure mode here (no LLM
+/// configured, API error, timeout, unparseable response) degrades to exactly
+/// the previous behaviour rather than failing the Add. That matters under the
+/// leaderboard harness specifically: it retries Add on 408/5xx, so turning a
+/// slow extraction into a failed request would cost far more than the facts
+/// are worth.
+async fn write_extracted_facts(state: &SharedState, req: &AddRequest, uid_tag: &str) {
+    if !state.fact_extraction {
+        return;
+    }
+
+    // The whole batch goes to the extractor as one window: resolving "she"
+    // to a name needs the surrounding turns, so per-message extraction would
+    // defeat the purpose (and cost more).
+    let mut window = String::new();
+    for msg in &req.messages {
+        if msg.content.trim().is_empty() {
+            continue;
+        }
+        if !msg.role.trim().is_empty() {
+            window.push_str(&msg.role);
+            window.push_str(": ");
+        }
+        window.push_str(&msg.content);
+        window.push('\n');
+    }
+    if window.trim().is_empty() {
+        return;
+    }
+
+    let extraction = tokio::time::timeout(
+        std::time::Duration::from_secs(state.fact_extraction_timeout_secs),
+        state.engine.extract_facts(&window),
+    )
+    .await;
+
+    let facts = match extraction {
+        Ok(Ok(facts)) => facts,
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "fact extraction failed; raw turns still stored");
+            return;
+        }
+        Err(_) => {
+            tracing::warn!(
+                timeout_secs = state.fact_extraction_timeout_secs,
+                "fact extraction timed out; raw turns still stored"
+            );
+            return;
+        }
+    };
+
+    let mut triplets = Vec::new();
+    for fact in &facts {
+        let text = fact.text.trim();
+        if text.is_empty() {
+            continue;
+        }
+
+        let embedding = match state.embed_model.embed(text).await {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to embed extracted fact; skipping");
+                continue;
+            }
+        };
+
+        let id = Uuid::new_v4();
+        let now = chrono::Utc::now();
+
+        let mut tags = vec![uid_tag.to_string(), "fact".to_string()];
+        if let Some(date) = fact
+            .date
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+        {
+            tags.push(format!("date:{date}"));
+        }
+
+        // Semantic, not Working: a fact is distilled rather than raw, and
+        // /search already queries both tiers, so this surfaces alongside the
+        // turns it came from instead of replacing them.
+        let engram = Engram {
+            envelope: Envelope {
+                id,
+                embedding,
+                // Above a raw turn (0.5) — a fact has been through an
+                // explicit extraction step and is stated standalone — but
+                // below a compacted engram, since nothing has corroborated
+                // it across sessions yet.
+                confidence: 0.6,
+                created_at: now,
+                updated_at: now,
+                last_accessed_at: now,
+                access_count: 0,
+                memory_type: MemoryType::Semantic,
+                source_sessions: vec![req.session_id.clone()],
+                supersedes: vec![],
+                superseded_by: None,
+                // Facts are short by construction, so the summary is the
+                // whole fact — no truncation, and BM25 covers it fully.
+                summary: text.to_string(),
+                tags,
+                content_hash: {
+                    use std::hash::{Hash, Hasher};
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    text.hash(&mut h);
+                    h.finish()
+                },
+            },
+            content: ContentBody {
+                engram_id: id,
+                full_text: text.to_string(),
+                provenance: vec![ProvenanceRecord {
+                    session_id: req.session_id.clone(),
+                    turn_id: None,
+                    timestamp: now,
+                    // The window the fact was distilled from, so /expand can
+                    // show what it was actually derived from.
+                    raw_excerpt: window.clone(),
+                }],
+                conflict_log: vec![],
+                related: vec![],
+                version: 1,
+            },
+        };
+
+        if let Err(e) = state.envelopes.upsert(&engram.envelope).await {
+            tracing::warn!(error = %e, "failed to store extracted fact; skipping");
+            continue;
+        }
+        state.envelopes.index_full_text(id, text).await;
+        if let Err(e) = state.content.put(&engram.content).await {
+            tracing::warn!(error = %e, "failed to store extracted fact body; skipping");
+            continue;
+        }
+        wal_append(state, &WalEntry::Engram(engram)).await;
+
+        // The extractor returns the triplet decomposition in the same call,
+        // so graph coverage now comes from the write path rather than waiting
+        // on compaction to run.
+        if let Some(triplet) = fact.as_triplet(id) {
+            triplets.push(triplet);
+        }
+    }
+
+    if !triplets.is_empty() {
+        if let Err(e) = state.engine.graph.insert(triplets.clone()).await {
+            tracing::warn!(error = %e, "graph insert failed for extracted facts");
+        } else {
+            wal_append(state, &WalEntry::Triplets { triplets }).await;
+        }
+    }
+
+    tracing::debug!(facts = facts.len(), "extracted facts stored");
 }
 
 async fn search(
@@ -1042,6 +1235,16 @@ async fn shutdown_signal() {
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum WalEntry {
     Engram(Engram),
+    /// Entity-relation triplets extracted on the write path. Derived from
+    /// engrams, but re-deriving them means re-running LLM extraction over the
+    /// whole corpus, so they're logged rather than rebuilt on restart.
+    /// Struct variant, not a newtype: this enum is internally tagged
+    /// (`tag = "kind"`), and serde cannot serialize a tagged newtype variant
+    /// wrapping a sequence — it fails at runtime, which here meant every
+    /// triplet silently missing from the WAL.
+    Triplets {
+        triplets: Vec<GraphTriplet>,
+    },
     AddSeen {
         request_id: String,
         entry: AddSeenEntry,
@@ -1103,6 +1306,18 @@ async fn save_snapshot(state: &SharedState, path: &str) {
     }
     let engram_count = entries.len();
 
+    // Graph triplets go in as one entry — they're small, and replaying them
+    // as a batch matches how they were written.
+    let mut triplet_count = 0;
+    match state.engine.graph.all().await {
+        Ok(triplets) if !triplets.is_empty() => {
+            triplet_count = triplets.len();
+            entries.push(WalEntry::Triplets { triplets });
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = %e, "snapshot: failed to read graph, skipping triplets"),
+    }
+
     let cutoff = chrono::Utc::now() - chrono::Duration::hours(ADD_SEEN_TTL_HOURS);
     let add_seen = state.add_seen.lock().await;
     let add_seen_count = add_seen.iter().filter(|(_, e)| e.seen_at >= cutoff).count();
@@ -1135,7 +1350,13 @@ async fn save_snapshot(state: &SharedState, path: &str) {
         tracing::warn!("snapshot: failed to rename {} -> {}: {}", tmp_path, path, e);
         return;
     }
-    tracing::info!(engram_count, add_seen_count, path, "snapshot saved");
+    tracing::info!(
+        engram_count,
+        triplet_count,
+        add_seen_count,
+        path,
+        "snapshot saved"
+    );
 
     // Everything up to here is now captured in the fresh snapshot, so the
     // WAL only needs to cover writes from this point forward.
@@ -1213,6 +1434,13 @@ async fn load_snapshot(state: &SharedState, path: &str) {
 async fn apply_wal_entry(state: &SharedState, entry: WalEntry) -> bool {
     match entry {
         WalEntry::Engram(engram) => restore_engram(state, engram).await,
+        WalEntry::Triplets { triplets } => {
+            if let Err(e) = state.engine.graph.insert(triplets).await {
+                tracing::warn!(error = %e, "snapshot: failed to restore graph triplets");
+                return false;
+            }
+            true
+        }
         WalEntry::AddSeen { request_id, entry } => {
             // An expired-by-now entry from an old WAL/snapshot is fine to
             // drop silently — the TTL is a safety margin, not a promise
@@ -1324,12 +1552,36 @@ pub fn build_state() -> SharedState {
     // MNEME_LLM_BACKEND=ollama (local, no key, needs a running
     // `ollama serve` with MNEME_OLLAMA_MODEL — default `qwen3:8b` — already
     // pulled) > Mock (placeholder synthesis only, tests/CI default).
+    let mut is_mock_llm = false;
     let llm: Arc<dyn ConsolidationLLM> = match std::env::var("ANTHROPIC_API_KEY") {
         Ok(key) if !key.trim().is_empty() => {
             tracing::info!("Compaction LLM backend: Anthropic (claude-haiku-4-5)");
             Arc::new(AnthropicLLM::new(key))
         }
         _ => match std::env::var("MNEME_LLM_BACKEND").as_deref() {
+            // The leaderboard mandates gpt-4o-mini for both Add and Search,
+            // and fact extraction runs on the Add path — so this is the arm
+            // to use for a compliant submission run.
+            Ok("openai") => {
+                let key = std::env::var("OPENAI_API_KEY").unwrap_or_default();
+                if key.trim().is_empty() {
+                    panic!("MNEME_LLM_BACKEND=openai requires OPENAI_API_KEY to be set");
+                }
+                let model =
+                    std::env::var("MNEME_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
+                tracing::info!(model, "LLM backend: OpenAI");
+                Arc::new(OpenAILLM::with_model(key, &model))
+            }
+            Ok("deepseek") => {
+                let key = std::env::var("DEEPSEEK_API_KEY").unwrap_or_default();
+                if key.trim().is_empty() {
+                    panic!("MNEME_LLM_BACKEND=deepseek requires DEEPSEEK_API_KEY to be set");
+                }
+                let model = std::env::var("MNEME_DEEPSEEK_MODEL")
+                    .unwrap_or_else(|_| "deepseek-v4-flash".into());
+                tracing::info!(model, "LLM backend: DeepSeek");
+                Arc::new(DeepSeekLLM::with_model(key, &model))
+            }
             Ok("ollama") => {
                 let model =
                     std::env::var("MNEME_OLLAMA_MODEL").unwrap_or_else(|_| "qwen3:8b".into());
@@ -1338,12 +1590,34 @@ pub fn build_state() -> SharedState {
             }
             _ => {
                 tracing::warn!(
-                    "No LLM backend configured — using MockLLM (compaction produces placeholder summaries only). Set ANTHROPIC_API_KEY or MNEME_LLM_BACKEND=ollama."
+                    "No LLM backend configured — using MockLLM (compaction produces placeholder summaries only, fact extraction disabled). Set ANTHROPIC_API_KEY, or MNEME_LLM_BACKEND=openai|deepseek|ollama."
                 );
+                is_mock_llm = true;
                 Arc::new(MockLLM::new())
             }
         },
     };
+
+    // Fact extraction is on by default, but only where there's a real LLM
+    // behind it — MockLLM returns placeholder text, which would land in the
+    // store as bogus fact engrams and actively hurt retrieval rather than
+    // just being useless. Tests and CI run on Mock, so this is the common
+    // case for it to be off.
+    let fact_extraction = !is_mock_llm
+        && !matches!(
+            std::env::var("MNEME_FACT_EXTRACTION").as_deref(),
+            Ok("0") | Ok("false")
+        );
+    let fact_extraction_timeout_secs = std::env::var("MNEME_FACT_EXTRACTION_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_FACT_EXTRACTION_TIMEOUT_SECS);
+    tracing::info!(
+        fact_extraction,
+        fact_extraction_timeout_secs,
+        "Fact extraction on /add"
+    );
+
     let engine = ConsolidationEngine::new(engine_store, engine_embed, llm, config.clone());
     Arc::new(AppState {
         engine,
@@ -1351,6 +1625,8 @@ pub fn build_state() -> SharedState {
         content: shared_content,
         embed_model,
         config,
+        fact_extraction,
+        fact_extraction_timeout_secs,
         add_seen: tokio::sync::Mutex::new(std::collections::HashMap::new()),
         snapshot_path: std::env::var("MNEME_SNAPSHOT_PATH").ok(),
         wal_lock: tokio::sync::Mutex::new(()),
@@ -1482,5 +1758,48 @@ async fn main() {
     if let Some(path) = &snapshot_path {
         tracing::info!("Saving final snapshot before exit...");
         save_snapshot(&shutdown_state, path).await;
+    }
+}
+
+#[cfg(test)]
+mod wal_tests {
+    use super::*;
+
+    /// `WalEntry` is internally tagged, and serde rejects some variant shapes
+    /// under that representation only at *runtime*, during serialization —
+    /// `wal_append` logs the failure and moves on, so the entry just never
+    /// reaches the WAL and the data silently fails to survive a restart. This
+    /// walks every variant through the exact serialize/deserialize round-trip
+    /// the WAL performs, so an unserializable shape fails the build instead.
+    #[test]
+    fn every_wal_variant_round_trips() {
+        let triplets = vec![GraphTriplet {
+            subject: "Melanie".into(),
+            relation: "adopted".into(),
+            object: "Cooper".into(),
+            date: Some("May 2023".into()),
+            source_engram_id: Uuid::new_v4(),
+        }];
+
+        let entries = vec![
+            WalEntry::Triplets { triplets },
+            WalEntry::AddSeen {
+                request_id: "r1".into(),
+                entry: AddSeenEntry {
+                    user_id: "u1".into(),
+                    session_id: "s1".into(),
+                    seen_at: chrono::Utc::now(),
+                },
+            },
+            WalEntry::RemoveAddSeen {
+                request_id: "r1".into(),
+            },
+        ];
+
+        for entry in &entries {
+            let line = serde_json::to_string(entry)
+                .expect("WalEntry variant must serialize under `tag = \"kind\"`");
+            serde_json::from_str::<WalEntry>(&line).expect("WAL line must deserialize back");
+        }
     }
 }

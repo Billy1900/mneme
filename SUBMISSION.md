@@ -137,6 +137,9 @@ this contract.
   returns the original response without writing again (see [Limitations](#known-limitations)).
 - Response: `{success, request_id, user_id, session_id}`, matching the required
   shape.
+- After the raw turns are written, the batch is passed through **LLM fact
+  extraction** (see below) and each extracted fact is stored as its own
+  additional engram.
 
 **`POST /search`**
 - `query` (and `options`, if present, concatenated in) is embedded and searched
@@ -155,6 +158,97 @@ this contract.
   but that's a separate signal from ranking; over a long-running evaluation,
   letting decay affect `/search` ranking would push correct-but-old memories
   out of `top_k`, which these datasets have no reason to penalize.
+
+## Fact extraction on the write path
+
+`POST /add` stores the raw turns, then distils the batch into **atomic facts**
+and stores each as its own searchable engram
+(`write_extracted_facts` in `mneme-server/src/main.rs`, backed by
+`ConsolidationEngine::extract_facts`).
+
+The motivation is a specific measured failure. Recall over raw turns plus
+compacted engrams scored **0.388** on LoCoMo (`benchmark/results/RESULTS.md`),
+and neither existing layer is a good retrieval target:
+
+- A **raw turn** is context-dependent. "yeah, I switched last month" embeds
+  nothing a later question can match, because the referent lives in a
+  neighbouring turn.
+- A **compacted engram** is a cluster-level summary. Compaction was supposed to
+  fix the above, but the same benchmark run showed it drops exactly the
+  fine-grained specifics — names, numbers, dates — that the questions ask
+  about, which is why `recall_with_fallback` had to start searching raw turns
+  again.
+
+A fact is the missing middle layer: one self-contained assertion with its
+pronouns resolved against the surrounding turns, and its date preserved. That
+is a unit a query can actually match.
+
+Details:
+
+- **One LLM call per `/add` batch**, not per message — resolving "she" to a name
+  requires the surrounding turns, so a per-message window would defeat the
+  purpose as well as costing more.
+- Facts are stored as **Semantic** engrams tagged `uid:{user_id}` and `fact`
+  (plus `date:{...}` when the fact carries one). `/search` already queries both
+  tiers, so facts surface alongside the turns they came from rather than
+  replacing them. Confidence is 0.6 — above a raw turn (0.5), below a compacted
+  engram, since nothing has corroborated the fact across sessions yet.
+- Facts are short by construction, so the envelope summary is the whole fact:
+  no truncation, and BM25 covers it fully.
+- The same call also returns an optional `(subject, relation, object)`
+  decomposition, which goes straight into the **entity-relation graph**. Graph
+  coverage therefore now comes from the write path instead of waiting on
+  compaction to run — and is built from extracted facts rather than from the
+  lossy compaction layer. Triplets are written to the WAL
+  (`WalEntry::Triplets`) and included in snapshots, so the graph survives a
+  restart rather than needing full re-extraction.
+- **Best-effort by design.** The raw turns are already durably written and
+  searchable before extraction runs, so every failure mode — no LLM configured,
+  API error, timeout, unparseable response — degrades to exactly the previous
+  behaviour rather than failing the Add. This matters under the harness
+  specifically: it retries Add on 408/5xx, so turning a slow extraction into a
+  failed request would cost far more than the facts are worth. The call is
+  capped at `MNEME_FACT_EXTRACTION_TIMEOUT_SECS` (default 30s — enough for
+  gpt-4o-mini; reasoning models need far more, see below).
+- Enabled by default whenever a real LLM backend is configured. Set
+  `MNEME_FACT_EXTRACTION=0` to store raw turns only. Forced **off** under
+  `MockLLM`, which would otherwise fill the store with placeholder "facts" that
+  dilute retrieval — this is why `cargo test` exercises the raw-turn path.
+
+### LLM backend for a compliant run
+
+The leaderboard mandates **gpt-4o-mini** for both Add and Search, and fact
+extraction runs on the Add path, so a submission run must use:
+
+```bash
+export OPENAI_API_KEY=sk-...
+export MNEME_LLM_BACKEND=openai   # gpt-4o-mini; override with MNEME_OPENAI_MODEL
+```
+
+Backend priority is otherwise `ANTHROPIC_API_KEY` > `MNEME_LLM_BACKEND`
+(`openai` | `deepseek` | `ollama`) > `MockLLM`. Note that `ANTHROPIC_API_KEY`
+takes precedence, so it must be unset for a compliant run.
+
+**If you use a reasoning model** (e.g. `MNEME_LLM_BACKEND=deepseek`), note two
+things measured during development, both of which make a misconfigured run look
+like "this conversation contained no facts" rather than like an error:
+
+- Reasoning tokens are charged against `max_tokens` *before* any visible
+  content. On the extraction prompt, DeepSeek V4 burned all 2048 tokens
+  reasoning and returned `finish_reason: length` with empty content; at 8192 it
+  used ~6000 reasoning tokens and then answered normally. The backend now
+  requests 8192 and raises an explicit error on an empty completion.
+- The round-trip takes well over the default 30s timeout. Set
+  `MNEME_FACT_EXTRACTION_TIMEOUT_SECS=180`.
+
+Verified end to end with local BGE embeddings + DeepSeek: a three-turn `/add`
+produced 3–4 fact engrams, and a query asking "What breed is Cooper and who
+picked her up?" returned the self-contained facts *"Cooper is a golden
+retriever."* and *"The user and Melanie picked up Cooper in Denver."*
+alongside the raw turns — where the raw turns alone only offer the
+pronoun-bound *"She is a golden retriever. Melanie and I picked her up in
+Denver."* Facts and graph triplets were confirmed to survive a `kill -9`
+restart via WAL replay.
 
 ## Isolation and performance
 

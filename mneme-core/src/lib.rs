@@ -208,6 +208,51 @@ pub struct GraphTriplet {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Extracted fact — an atomic, self-contained statement distilled from
+// raw conversation turns on the write path.
+//
+// Raw turns are context-dependent ("yeah, I switched last month") and
+// compacted engrams are cluster-level summaries that lose specifics. A
+// fact is neither: one standalone assertion with its pronouns resolved,
+// which is what a retrieval query can actually match against.
+// ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractedFact {
+    /// The fact as a single self-contained sentence, e.g.
+    /// "Melanie adopted a golden retriever named Cooper."
+    pub text: String,
+    /// Free-form date/time the fact pertains to, if the source turn carried
+    /// one. Not parsed/normalized — same convention as [`GraphTriplet::date`].
+    pub date: Option<String>,
+    /// Optional (subject, relation, object) decomposition of the same fact,
+    /// fed straight into the entity graph. Populated in the same LLM call
+    /// that produces `text`, so graph coverage costs no extra round-trip.
+    pub subject: Option<String>,
+    pub relation: Option<String>,
+    pub object: Option<String>,
+}
+
+impl ExtractedFact {
+    /// The triplet form of this fact, if the extractor decomposed it.
+    pub fn as_triplet(&self, source_engram_id: Uuid) -> Option<GraphTriplet> {
+        let subject = self.subject.as_ref()?.trim();
+        let relation = self.relation.as_ref()?.trim();
+        let object = self.object.as_ref()?.trim();
+        if subject.is_empty() || relation.is_empty() || object.is_empty() {
+            return None;
+        }
+        Some(GraphTriplet {
+            subject: subject.to_string(),
+            relation: relation.to_string(),
+            object: object.to_string(),
+            date: self.date.clone(),
+            source_engram_id,
+        })
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Drift check result
 // ─────────────────────────────────────────────────────────────
 

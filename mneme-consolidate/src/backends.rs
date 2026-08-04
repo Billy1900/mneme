@@ -156,8 +156,15 @@ impl ConsolidationLLM for OpenAILLM {
     async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
         let body = serde_json::json!({
             "model": self.model,
-            "max_tokens": 512,
+            // Fact extraction returns up to 12 facts, each a full sentence
+            // plus a subject/relation/object decomposition. 512 truncated
+            // that mid-object, which under `json_object` mode comes back as
+            // an empty completion rather than a partial one.
+            "max_tokens": 2048,
             "messages": [{"role": "user", "content": prompt}],
+            // This mode can only produce a top-level JSON *object*, so every
+            // prompt sent through this backend must ask for one — a request
+            // for a bare array returns empty. See `parse_extraction_list`.
             "response_format": {"type": "json_object"},
         });
 
@@ -193,6 +200,21 @@ impl ConsolidationLLM for OpenAILLM {
             .and_then(|arr| arr.first())
             .and_then(|c| c["message"]["content"].as_str())
             .ok_or_else(|| ConsolidateError::LLM("no content in response".into()))?;
+
+        // An empty completion with `finish_reason: length` means the token
+        // budget ran out before any visible content — for a reasoning model,
+        // usually spent entirely on reasoning tokens. Surfacing it as an error
+        // matters because the callers here parse JSON out of this string, and
+        // an empty string parses to "nothing extracted", silently turning a
+        // misconfiguration into a plausible-looking result.
+        if text.trim().is_empty() {
+            let finish_reason = data["choices"][0]["finish_reason"]
+                .as_str()
+                .unwrap_or("unknown");
+            return Err(ConsolidateError::LLM(format!(
+                "empty completion (finish_reason: {finish_reason}) — if 'length', raise max_tokens; reasoning models spend it before emitting content"
+            )));
+        }
 
         let cleaned = text
             .trim()
@@ -254,8 +276,20 @@ impl ConsolidationLLM for DeepSeekLLM {
     async fn complete(&self, prompt: &str) -> Result<String, ConsolidateError> {
         let body = serde_json::json!({
             "model": self.model,
-            "max_tokens": 512,
+            // DeepSeek's V4 models are reasoners, and reasoning tokens are
+            // charged against `max_tokens` before any visible content is
+            // emitted. Measured on the fact-extraction prompt: at 2048 the
+            // model burned all 2048 on reasoning and returned
+            // `finish_reason: length` with an EMPTY content string — which
+            // looks exactly like "this excerpt had no facts". At 8192 the same
+            // prompt used ~6000 reasoning tokens and then answered normally.
+            // Hence the large ceiling; it is a floor on reasoning headroom,
+            // not an expectation about answer length.
+            "max_tokens": 8192,
             "messages": [{"role": "user", "content": prompt}],
+            // This mode can only produce a top-level JSON *object*, so every
+            // prompt sent through this backend must ask for one — a request
+            // for a bare array returns empty. See `parse_extraction_list`.
             "response_format": {"type": "json_object"},
         });
 
@@ -291,6 +325,21 @@ impl ConsolidationLLM for DeepSeekLLM {
             .and_then(|arr| arr.first())
             .and_then(|c| c["message"]["content"].as_str())
             .ok_or_else(|| ConsolidateError::LLM("no content in response".into()))?;
+
+        // An empty completion with `finish_reason: length` means the token
+        // budget ran out before any visible content — for a reasoning model,
+        // usually spent entirely on reasoning tokens. Surfacing it as an error
+        // matters because the callers here parse JSON out of this string, and
+        // an empty string parses to "nothing extracted", silently turning a
+        // misconfiguration into a plausible-looking result.
+        if text.trim().is_empty() {
+            let finish_reason = data["choices"][0]["finish_reason"]
+                .as_str()
+                .unwrap_or("unknown");
+            return Err(ConsolidateError::LLM(format!(
+                "empty completion (finish_reason: {finish_reason}) — if 'length', raise max_tokens; reasoning models spend it before emitting content"
+            )));
+        }
 
         let cleaned = text
             .trim()

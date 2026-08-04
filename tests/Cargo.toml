@@ -13,6 +13,7 @@ mneme-api = { path = "../mneme-api" }
 tokio = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+async-trait = { workspace = true }
 
 [[test]]
 name = "integration"
