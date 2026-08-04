@@ -282,10 +282,11 @@ impl ConsolidationLLM for DeepSeekLLM {
             // model burned all 2048 on reasoning and returned
             // `finish_reason: length` with an EMPTY content string — which
             // looks exactly like "this excerpt had no facts". At 8192 the same
-            // prompt used ~6000 reasoning tokens and then answered normally.
-            // Hence the large ceiling; it is a floor on reasoning headroom,
-            // not an expectation about answer length.
-            "max_tokens": 8192,
+            // three-turn prompt answered normally, but a full LoCoMo session
+            // (~22 turns) exhausted 8192 too. Hence the large ceiling; it is a
+            // floor on reasoning headroom, not an expectation about answer
+            // length. 16384 is accepted by the API; 32768 also is, if needed.
+            "max_tokens": 16384,
             "messages": [{"role": "user", "content": prompt}],
             // This mode can only produce a top-level JSON *object*, so every
             // prompt sent through this backend must ask for one — a request

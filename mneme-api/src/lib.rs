@@ -53,6 +53,44 @@ pub struct MnemeDetail {
 // Fact engrams
 // ─────────────────────────────────────────────────────────────
 
+/// Lines of conversation per extraction call.
+///
+/// Two independent reasons not to send a whole session at once. Coverage: the
+/// extractor is capped at 12 facts per call, so a 22-turn LoCoMo session would
+/// silently discard most of what it contains. Budget: a long window makes a
+/// reasoning model think for longer, and a full session was measured
+/// exhausting even a 16k token budget and returning an empty completion.
+const FACT_WINDOW_LINES: usize = 10;
+
+/// Lines repeated between consecutive chunks, so a pronoun near a boundary
+/// still has its referent in view.
+const FACT_WINDOW_OVERLAP: usize = 2;
+
+/// Split a conversation window into overlapping chunks for extraction.
+pub fn chunk_window(window: &str) -> Vec<String> {
+    let lines: Vec<&str> = window.lines().filter(|l| !l.trim().is_empty()).collect();
+    if lines.len() <= FACT_WINDOW_LINES {
+        return if lines.is_empty() {
+            vec![]
+        } else {
+            vec![lines.join("\n")]
+        };
+    }
+
+    let step = FACT_WINDOW_LINES - FACT_WINDOW_OVERLAP;
+    let mut chunks = Vec::new();
+    let mut start = 0;
+    while start < lines.len() {
+        let end = (start + FACT_WINDOW_LINES).min(lines.len());
+        chunks.push(lines[start..end].join("\n"));
+        if end == lines.len() {
+            break;
+        }
+        start += step;
+    }
+    chunks
+}
+
 /// Turn extracted facts into engrams, plus the graph triplets they imply.
 ///
 /// Deliberately has **no storage side effects**: it decides only what a fact
@@ -302,7 +340,38 @@ where
             return Ok(0);
         }
 
-        let facts = self.engine.extract_facts(window).await?;
+        // Extract per chunk, then deduplicate: the overlap between chunks
+        // exists so boundary pronouns resolve, and it will naturally restate
+        // some facts.
+        let mut facts: Vec<ExtractedFact> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut failures = 0;
+
+        let chunks = chunk_window(window);
+        let chunk_count = chunks.len();
+        for chunk in &chunks {
+            match self.engine.extract_facts(chunk).await {
+                Ok(chunk_facts) => {
+                    for fact in chunk_facts {
+                        if seen.insert(fact.text.trim().to_lowercase()) {
+                            facts.push(fact);
+                        }
+                    }
+                }
+                // One bad chunk shouldn't discard the rest of the session.
+                Err(e) => {
+                    failures += 1;
+                    tracing::warn!(error = %e, session = session_id, "fact extraction chunk failed");
+                }
+            }
+        }
+
+        if failures == chunk_count {
+            return Err(ConsolidateError::LLM(format!(
+                "all {chunk_count} extraction chunk(s) failed for session {session_id}"
+            )));
+        }
+
         let (engrams, triplets) =
             build_fact_engrams(&facts, session_id, tags, window, &self.embed_model).await?;
 

@@ -1772,4 +1772,38 @@ mod tests {
             .iter()
             .any(|r| r.envelope.summary == "Melanie adopted Cooper."));
     }
+
+    #[test]
+    fn test_chunk_window_splits_with_overlap() {
+        use mneme_api::chunk_window;
+
+        // Short windows stay whole — no reason to pay for extra calls.
+        assert_eq!(chunk_window("a\nb\nc").len(), 1);
+        assert!(chunk_window("   ").is_empty());
+
+        // A 22-line session (typical LoCoMo) must split: the extractor caps
+        // at 12 facts per call, so one call would silently drop most of it.
+        let window: String = (1..=22)
+            .map(|i| format!("line{i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let chunks = chunk_window(&window);
+        assert!(chunks.len() > 1, "long window must be chunked");
+
+        // Consecutive chunks overlap, so a pronoun near a boundary still has
+        // its referent in view.
+        let first_lines: Vec<&str> = chunks[0].lines().collect();
+        let second_lines: Vec<&str> = chunks[1].lines().collect();
+        assert_eq!(first_lines.len(), 10);
+        assert_eq!(&first_lines[8..10], &second_lines[0..2]);
+
+        // Every line survives somewhere — chunking must not drop content.
+        for i in 1..=22 {
+            let needle = format!("line{i}");
+            assert!(
+                chunks.iter().any(|c| c.lines().any(|l| l == needle)),
+                "{needle} missing from all chunks"
+            );
+        }
+    }
 }
