@@ -726,6 +726,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_sqlite_envelope_search_tags_filter() {
+        use mneme_store::SqliteEnvelopeIndex;
+        use mneme_embed::EmbeddingModel;
+        use chrono::Utc;
+        use uuid::Uuid;
+
+        let idx = SqliteEnvelopeIndex::in_memory().unwrap();
+        let embed = MockEmbeddingModel::new(64);
+        let now = Utc::now();
+
+        let id = Uuid::new_v4();
+        let embedding = embed.embed("tagged sqlite memory").await.unwrap();
+        let envelope = Envelope {
+            id,
+            embedding: embedding.clone(),
+            confidence: 0.8,
+            created_at: now,
+            updated_at: now,
+            last_accessed_at: now,
+            access_count: 0,
+            memory_type: MemoryType::Semantic,
+            source_sessions: vec!["s1".to_string()],
+            supersedes: vec![],
+            superseded_by: None,
+            summary: "tagged sqlite memory".to_string(),
+            tags: vec!["uid:alice".to_string()],
+            content_hash: 0,
+        };
+        idx.upsert(&envelope).await.unwrap();
+
+        // Matching tag
+        let results = idx
+            .search(&MemoryQuery {
+                embedding: embedding.clone(),
+                top_k: 10,
+                active_only: true,
+                tags: vec!["uid:alice".to_string()],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(results.iter().any(|r| r.envelope.id == id));
+
+        // Non-matching tag (e.g. a different user_id) must not leak this envelope
+        let results2 = idx
+            .search(&MemoryQuery {
+                embedding,
+                top_k: 10,
+                active_only: true,
+                tags: vec!["uid:bob".to_string()],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(!results2.iter().any(|r| r.envelope.id == id));
+    }
+
+    #[tokio::test]
     async fn test_sqlite_envelope_mark_superseded() {
         use mneme_store::SqliteEnvelopeIndex;
         use mneme_embed::EmbeddingModel;

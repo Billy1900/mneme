@@ -23,6 +23,24 @@ pub trait EmbeddingModel: Send + Sync {
     fn dim(&self) -> usize;
 }
 
+// Lets `Arc<dyn EmbeddingModel>` itself satisfy `EmbeddingModel + Clone`, so
+// callers (e.g. mneme-server) can pick a concrete backend at runtime behind
+// one trait object instead of committing to a type at compile time.
+#[async_trait]
+impl EmbeddingModel for std::sync::Arc<dyn EmbeddingModel> {
+    async fn embed(&self, text: &str) -> Result<EmbeddingVec, EmbedError> {
+        (**self).embed(text).await
+    }
+
+    async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<EmbeddingVec>, EmbedError> {
+        (**self).embed_batch(texts).await
+    }
+
+    fn dim(&self) -> usize {
+        (**self).dim()
+    }
+}
+
 // ─────────────────────────────────────────────────────────────
 // Clustering (used by compaction)
 // ─────────────────────────────────────────────────────────────

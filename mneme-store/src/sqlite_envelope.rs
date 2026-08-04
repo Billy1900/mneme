@@ -207,6 +207,9 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                     (1.0 - query.recency_weight) * similarity + query.recency_weight * recency;
                 RetrievalResult { envelope: env, similarity, retrieval_score }
             })
+            .filter(|r| {
+                query.tags.is_empty() || query.tags.iter().all(|t| r.envelope.tags.contains(t))
+            })
             .collect();
 
         results.sort_by(|a, b| b.retrieval_score.partial_cmp(&a.retrieval_score).unwrap());

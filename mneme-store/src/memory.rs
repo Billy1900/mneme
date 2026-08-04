@@ -8,7 +8,7 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use mneme_core::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
@@ -17,12 +17,20 @@ use crate::{EnvelopeIndex, StoreError, StoreStats};
 #[derive(Clone)]
 pub struct InMemoryEnvelopeIndex {
     envelopes: Arc<RwLock<HashMap<Uuid, Envelope>>>,
+    /// tag -> envelope ids with that tag. Lets `search()` narrow to a
+    /// candidate set via AND-intersection before scoring, instead of
+    /// scanning every envelope in the store on every query. Without this,
+    /// a tag filter like `uid:{user_id}` (used for multi-tenant isolation)
+    /// only affects *correctness*, not cost — every user's search would
+    /// still pay for every other user's data.
+    tag_index: Arc<RwLock<HashMap<String, HashSet<Uuid>>>>,
 }
 
 impl InMemoryEnvelopeIndex {
     pub fn new() -> Self {
         Self {
             envelopes: Arc::new(RwLock::new(HashMap::new())),
+            tag_index: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -45,6 +53,22 @@ impl Default for InMemoryEnvelopeIndex {
 impl EnvelopeIndex for InMemoryEnvelopeIndex {
     async fn upsert(&self, envelope: &Envelope) -> Result<(), StoreError> {
         let mut store = self.envelopes.write().unwrap();
+        let mut tag_index = self.tag_index.write().unwrap();
+
+        // Re-upserting an existing id can change its tags — drop the old
+        // tag associations before adding the new ones, or the index would
+        // accumulate stale entries pointing at a now-different tag set.
+        if let Some(old) = store.get(&envelope.id) {
+            for t in &old.tags {
+                if let Some(set) = tag_index.get_mut(t) {
+                    set.remove(&envelope.id);
+                }
+            }
+        }
+        for t in &envelope.tags {
+            tag_index.entry(t.clone()).or_default().insert(envelope.id);
+        }
+
         store.insert(envelope.id, envelope.clone());
         Ok(())
     }
@@ -52,8 +76,34 @@ impl EnvelopeIndex for InMemoryEnvelopeIndex {
     async fn search(&self, query: &MemoryQuery) -> Result<Vec<RetrievalResult>, StoreError> {
         let store = self.envelopes.read().unwrap();
 
-        let mut results: Vec<RetrievalResult> = store
-            .values()
+        // When tags are given, narrow to the AND-intersection of their
+        // candidate sets first — this is what makes a tag filter (e.g.
+        // `uid:{user_id}`) actually cheap instead of just correct.
+        let candidate_ids: Option<Vec<Uuid>> = if query.tags.is_empty() {
+            None
+        } else {
+            let tag_index = self.tag_index.read().unwrap();
+            let mut tags = query.tags.iter();
+            let mut candidates: HashSet<Uuid> = match tags.next() {
+                Some(first) => tag_index.get(first).cloned().unwrap_or_default(),
+                None => HashSet::new(),
+            };
+            for t in tags {
+                if candidates.is_empty() {
+                    break;
+                }
+                let set = tag_index.get(t).cloned().unwrap_or_default();
+                candidates = candidates.intersection(&set).copied().collect();
+            }
+            Some(candidates.into_iter().collect())
+        };
+
+        let envelopes_iter: Box<dyn Iterator<Item = &Envelope>> = match &candidate_ids {
+            Some(ids) => Box::new(ids.iter().filter_map(|id| store.get(id))),
+            None => Box::new(store.values()),
+        };
+
+        let mut results: Vec<RetrievalResult> = envelopes_iter
             .filter(|env| {
                 if query.active_only && !env.is_active() {
                     return false;
@@ -65,12 +115,6 @@ impl EnvelopeIndex for InMemoryEnvelopeIndex {
                 }
                 if let Some(min_conf) = query.min_confidence {
                     if env.confidence < min_conf {
-                        return false;
-                    }
-                }
-                if !query.tags.is_empty() {
-                    let has_all_tags = query.tags.iter().all(|t| env.tags.contains(t));
-                    if !has_all_tags {
                         return false;
                     }
                 }
@@ -135,18 +179,38 @@ impl EnvelopeIndex for InMemoryEnvelopeIndex {
     async fn gc(&self, confidence_floor: f32, older_than_hours: u64) -> Result<usize, StoreError> {
         let mut store = self.envelopes.write().unwrap();
         let cutoff = Utc::now() - chrono::Duration::hours(older_than_hours as i64);
-        let before = store.len();
-        store.retain(|_, env| {
-            let too_old = env.memory_type == MemoryType::Working && env.created_at < cutoff;
-            let too_low = env.confidence < confidence_floor && !env.is_active();
-            !(too_old || too_low)
-        });
-        Ok(before - store.len())
+        let to_remove: Vec<Uuid> = store
+            .iter()
+            .filter(|(_, env)| {
+                let too_old = env.memory_type == MemoryType::Working && env.created_at < cutoff;
+                let too_low = env.confidence < confidence_floor && !env.is_active();
+                too_old || too_low
+            })
+            .map(|(id, _)| *id)
+            .collect();
+
+        let mut tag_index = self.tag_index.write().unwrap();
+        for id in &to_remove {
+            if let Some(env) = store.remove(id) {
+                for t in &env.tags {
+                    if let Some(set) = tag_index.get_mut(t) {
+                        set.remove(id);
+                    }
+                }
+            }
+        }
+        Ok(to_remove.len())
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), StoreError> {
         let mut store = self.envelopes.write().unwrap();
-        store.remove(&id).ok_or(StoreError::NotFound(id))?;
+        let env = store.remove(&id).ok_or(StoreError::NotFound(id))?;
+        let mut tag_index = self.tag_index.write().unwrap();
+        for t in &env.tags {
+            if let Some(set) = tag_index.get_mut(t) {
+                set.remove(&id);
+            }
+        }
         Ok(())
     }
 

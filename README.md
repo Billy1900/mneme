@@ -4,6 +4,8 @@
 
 A Rust memory engine for autonomous AI agents built on three operations from cognitive neuroscience that no existing system implements together: **memory compaction**, **memory evolution**, and **memory conflict resolution**.
 
+> Submitting to the Agent Memory Leaderboard? See [SUBMISSION.md](SUBMISSION.md) for the Add/Search contract mapping and run instructions.
+
 ## Why another memory system?
 
 Every existing agent memory system treats memory as a **database problem**: store, index, retrieve. Mneme treats memory as a **living process** — memories compress, evolve on retrieval, and resolve contradictions using three distinct strategies. This directly implements mechanisms from neuroscience that the field has been talking about but nobody has built.
