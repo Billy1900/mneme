@@ -787,6 +787,77 @@ mod tests {
         assert!(!results2.iter().any(|r| r.envelope.id == id));
     }
 
+    // Regression test for the SQLite backend's BM25 lexical channel (FTS5)
+    // fused with vector similarity via RRF, mirroring InMemoryEnvelopeIndex.
+    // Uses two envelopes with near-identical mock embeddings so a pure
+    // vector search can't reliably distinguish them; only the BM25 channel
+    // (via `index_full_text`, matching a keyword the summary alone doesn't
+    // contain) can pick the right one.
+    #[tokio::test]
+    async fn test_sqlite_envelope_search_bm25_full_text() {
+        use chrono::Utc;
+        use mneme_embed::EmbeddingModel;
+        use mneme_store::SqliteEnvelopeIndex;
+        use uuid::Uuid;
+
+        let idx = SqliteEnvelopeIndex::in_memory().unwrap();
+        let embed = MockEmbeddingModel::new(64);
+        let now = Utc::now();
+
+        let target_id = Uuid::new_v4();
+        let other_id = Uuid::new_v4();
+        let query_embedding = embed.embed("some unrelated query text").await.unwrap();
+
+        for (id, summary) in [
+            (target_id, "short summary"),
+            (other_id, "a different short summary"),
+        ] {
+            let envelope = Envelope {
+                id,
+                embedding: query_embedding.clone(),
+                confidence: 0.8,
+                created_at: now,
+                updated_at: now,
+                last_accessed_at: now,
+                access_count: 0,
+                memory_type: MemoryType::Working,
+                source_sessions: vec!["s1".to_string()],
+                supersedes: vec![],
+                superseded_by: None,
+                summary: summary.to_string(),
+                tags: vec![],
+                content_hash: 0,
+            };
+            idx.upsert(&envelope).await.unwrap();
+        }
+
+        // Full text far exceeds what's in `summary` — only reachable via
+        // `index_full_text`, same pattern as the in-memory backend.
+        idx.index_full_text(target_id, "a long message about many topics that eventually mentions the unique keyword QUARTZFALCON near the end")
+            .await
+            .unwrap();
+
+        let results = idx
+            .search(&MemoryQuery {
+                embedding: query_embedding,
+                top_k: 10,
+                active_only: true,
+                query_text: "QUARTZFALCON".to_string(),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        assert!(
+            !results.is_empty(),
+            "BM25 channel should find the envelope matching the keyword"
+        );
+        assert_eq!(
+            results[0].envelope.id, target_id,
+            "the envelope matching the BM25 keyword should rank first despite identical vectors"
+        );
+    }
+
     #[tokio::test]
     async fn test_sqlite_envelope_mark_superseded() {
         use chrono::Utc;

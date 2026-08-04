@@ -63,10 +63,13 @@ pub struct AppState {
     content: Arc<InMemoryContentStore>,
     embed_model: Arc<dyn EmbeddingModel>,
     config: MnemeConfig,
-    /// Idempotency table for /add: request_id -> (user_id, session_id) of the
-    /// first successful call. The platform retries Add on 408/409/425/429/
-    /// 5xx, so a retried request_id must not be written twice.
-    add_seen: tokio::sync::Mutex<std::collections::HashMap<String, (String, String)>>,
+    /// Idempotency table for /add: request_id -> details of the first
+    /// successful call. The platform retries Add on 408/409/425/429/5xx, so
+    /// a retried request_id must not be written twice. Persisted through the
+    /// same snapshot + WAL as engrams (see `WalEntry`) and periodically
+    /// evicted by age (see `ADD_SEEN_TTL_HOURS`) so it doesn't grow
+    /// unbounded over a long-running evaluation.
+    add_seen: tokio::sync::Mutex<std::collections::HashMap<String, AddSeenEntry>>,
     /// Set from MNEME_SNAPSHOT_PATH. `None` means fully in-memory — no
     /// snapshot, no write-ahead log, a restart loses everything.
     snapshot_path: Option<String>,
@@ -226,6 +229,22 @@ struct AddResponse {
     user_id: String,
     session_id: String,
 }
+
+/// One entry in the `/add` idempotency table (`AppState.add_seen`).
+#[derive(Clone, Serialize, Deserialize)]
+struct AddSeenEntry {
+    user_id: String,
+    session_id: String,
+    seen_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// How long a `request_id` is remembered for dedup purposes before the
+/// periodic eviction task drops it. The platform's own retries land within
+/// seconds to minutes of the original call, so this is a generous safety
+/// margin, not a tight estimate — just enough to bound memory growth over a
+/// long-running (72h) evaluation without dropping a dedup entry a real
+/// retry might still need.
+const ADD_SEEN_TTL_HOURS: i64 = 24;
 
 #[derive(Deserialize)]
 struct SearchRequest {
@@ -403,7 +422,7 @@ async fn remember(
         .put(&engram.content)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
-    wal_append(&state, &engram).await;
+    wal_append(&state, &WalEntry::Engram(engram)).await;
 
     Ok(Json(RememberResponse {
         id: id.to_string(),
@@ -544,18 +563,29 @@ async fn add(
     // can't both pass the check and double-write.
     {
         let mut seen = state.add_seen.lock().await;
-        if let Some((user_id, session_id)) = seen.get(&req.request_id) {
+        if let Some(entry) = seen.get(&req.request_id) {
             return Ok(Json(AddResponse {
                 success: true,
                 request_id: req.request_id,
-                user_id: user_id.clone(),
-                session_id: session_id.clone(),
+                user_id: entry.user_id.clone(),
+                session_id: entry.session_id.clone(),
             }));
         }
-        seen.insert(
-            req.request_id.clone(),
-            (req.user_id.clone(), req.session_id.clone()),
-        );
+        let entry = AddSeenEntry {
+            user_id: req.user_id.clone(),
+            session_id: req.session_id.clone(),
+            seen_at: chrono::Utc::now(),
+        };
+        seen.insert(req.request_id.clone(), entry.clone());
+        drop(seen);
+        wal_append(
+            &state,
+            &WalEntry::AddSeen {
+                request_id: req.request_id.clone(),
+                entry,
+            },
+        )
+        .await;
     }
 
     let uid_tag = uid_tag(&req.user_id);
@@ -564,7 +594,17 @@ async fn add(
     if let Err(e) = write_result {
         // The write genuinely failed — undo the reservation so a real retry
         // (as opposed to a duplicate-delivery retry) can actually happen.
+        // Also log the rollback to the WAL, or a crash between here and the
+        // next snapshot would replay the now-stale reservation on restart
+        // and incorrectly treat a real retry as already handled.
         state.add_seen.lock().await.remove(&req.request_id);
+        wal_append(
+            &state,
+            &WalEntry::RemoveAddSeen {
+                request_id: req.request_id.clone(),
+            },
+        )
+        .await;
         return Err(e);
     }
 
@@ -666,7 +706,7 @@ async fn write_add_messages(
             .put(&engram.content)
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
-        wal_append(state, &engram).await;
+        wal_append(state, &WalEntry::Engram(engram)).await;
     }
 
     Ok(())
@@ -994,14 +1034,31 @@ async fn shutdown_signal() {
 // gap between "read for the snapshot" and "truncate" and be silently lost.
 // ─────────────────────────────────────────────────────────────
 
-async fn wal_append(state: &SharedState, engram: &Engram) {
+/// One unit of durable state: either a memory write or an `/add`
+/// idempotency-table mutation. The snapshot file is `Vec<WalEntry>` and the
+/// WAL is the same type, one JSON object per line — so both the base
+/// snapshot and the WAL replay through the identical `apply_wal_entry`.
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum WalEntry {
+    Engram(Engram),
+    AddSeen {
+        request_id: String,
+        entry: AddSeenEntry,
+    },
+    RemoveAddSeen {
+        request_id: String,
+    },
+}
+
+async fn wal_append(state: &SharedState, entry: &WalEntry) {
     let Some(path) = &state.snapshot_path else {
         return;
     };
-    let mut line = match serde_json::to_vec(engram) {
+    let mut line = match serde_json::to_vec(entry) {
         Ok(j) => j,
         Err(e) => {
-            tracing::warn!("wal: failed to serialize engram: {}", e);
+            tracing::warn!("wal: failed to serialize entry: {}", e);
             return;
         }
     };
@@ -1031,10 +1088,10 @@ async fn save_snapshot(state: &SharedState, path: &str) {
     let _guard = state.wal_lock.lock().await;
 
     let envelopes = state.envelopes.all();
-    let mut engrams = Vec::with_capacity(envelopes.len());
+    let mut entries = Vec::with_capacity(envelopes.len());
     for envelope in envelopes {
         match state.content.get(envelope.id).await {
-            Ok(content) => engrams.push(Engram { envelope, content }),
+            Ok(content) => entries.push(WalEntry::Engram(Engram { envelope, content })),
             Err(e) => {
                 // Envelope/content are written together by every handler
                 // (`upsert` then `put`); a missing body means a write was
@@ -1044,9 +1101,23 @@ async fn save_snapshot(state: &SharedState, path: &str) {
             }
         }
     }
+    let engram_count = entries.len();
+
+    let cutoff = chrono::Utc::now() - chrono::Duration::hours(ADD_SEEN_TTL_HOURS);
+    let add_seen = state.add_seen.lock().await;
+    let add_seen_count = add_seen.iter().filter(|(_, e)| e.seen_at >= cutoff).count();
+    for (request_id, entry) in add_seen.iter() {
+        if entry.seen_at >= cutoff {
+            entries.push(WalEntry::AddSeen {
+                request_id: request_id.clone(),
+                entry: entry.clone(),
+            });
+        }
+    }
+    drop(add_seen);
 
     let tmp_path = format!("{path}.tmp");
-    let json = match serde_json::to_vec(&engrams) {
+    let json = match serde_json::to_vec(&entries) {
         Ok(j) => j,
         Err(e) => {
             tracing::warn!("snapshot: failed to serialize: {}", e);
@@ -1064,7 +1135,7 @@ async fn save_snapshot(state: &SharedState, path: &str) {
         tracing::warn!("snapshot: failed to rename {} -> {}: {}", tmp_path, path, e);
         return;
     }
-    tracing::info!(count = engrams.len(), path, "snapshot saved");
+    tracing::info!(engram_count, add_seen_count, path, "snapshot saved");
 
     // Everything up to here is now captured in the fresh snapshot, so the
     // WAL only needs to cover writes from this point forward.
@@ -1085,7 +1156,7 @@ async fn load_snapshot(state: &SharedState, path: &str) {
             return;
         }
     };
-    let engrams: Vec<Engram> = match serde_json::from_slice(&bytes) {
+    let entries: Vec<WalEntry> = match serde_json::from_slice(&bytes) {
         Ok(e) => e,
         Err(e) => {
             tracing::warn!("snapshot: failed to parse {}: {} — starting empty", path, e);
@@ -1094,8 +1165,8 @@ async fn load_snapshot(state: &SharedState, path: &str) {
     };
 
     let mut count = 0;
-    for engram in engrams {
-        if restore_engram(state, engram).await {
+    for entry in entries {
+        if apply_wal_entry(state, entry).await {
             count += 1;
         }
     }
@@ -1113,9 +1184,9 @@ async fn load_snapshot(state: &SharedState, path: &str) {
                 if line.trim().is_empty() {
                     continue;
                 }
-                match serde_json::from_str::<Engram>(line) {
-                    Ok(engram) => {
-                        if restore_engram(state, engram).await {
+                match serde_json::from_str::<WalEntry>(line) {
+                    Ok(entry) => {
+                        if apply_wal_entry(state, entry).await {
                             replayed += 1;
                         }
                     }
@@ -1135,7 +1206,30 @@ async fn load_snapshot(state: &SharedState, path: &str) {
 }
 
 /// Replay one snapshot/WAL entry into the live store. Shared by both
-/// `load_snapshot`'s base-snapshot pass and its WAL-replay pass.
+/// `load_snapshot`'s base-snapshot pass and its WAL-replay pass. Returns
+/// whether the entry actually changed live state (used only for the
+/// restored-engram count in the log line above — AddSeen/RemoveAddSeen
+/// always "count" as applied since they can't partially fail).
+async fn apply_wal_entry(state: &SharedState, entry: WalEntry) -> bool {
+    match entry {
+        WalEntry::Engram(engram) => restore_engram(state, engram).await,
+        WalEntry::AddSeen { request_id, entry } => {
+            // An expired-by-now entry from an old WAL/snapshot is fine to
+            // drop silently — the TTL is a safety margin, not a promise
+            // every entry ever written will be replayed forever.
+            let cutoff = chrono::Utc::now() - chrono::Duration::hours(ADD_SEEN_TTL_HOURS);
+            if entry.seen_at >= cutoff {
+                state.add_seen.lock().await.insert(request_id, entry);
+            }
+            true
+        }
+        WalEntry::RemoveAddSeen { request_id } => {
+            state.add_seen.lock().await.remove(&request_id);
+            true
+        }
+    }
+}
+
 async fn restore_engram(state: &SharedState, engram: Engram) -> bool {
     let id = engram.envelope.id;
     if let Err(e) = state.envelopes.upsert(&engram.envelope).await {
@@ -1309,6 +1403,27 @@ async fn main() {
                     Ok(n) => tracing::info!(removed = n, "Scheduled GC applied"),
                     Err(e) => tracing::warn!("GC task error: {}", e),
                 }
+            }
+        });
+    }
+
+    // Spawn background eviction for the /add idempotency table — runs
+    // every hour. `add_seen` has no other cap, so a long-running (72h)
+    // evaluation with a high volume of unique request_ids would otherwise
+    // grow it forever; ADD_SEEN_TTL_HOURS bounds it instead.
+    {
+        let evict_state = Arc::clone(&state);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+            loop {
+                interval.tick().await;
+                let cutoff = chrono::Utc::now() - chrono::Duration::hours(ADD_SEEN_TTL_HOURS);
+                let mut seen = evict_state.add_seen.lock().await;
+                let before = seen.len();
+                seen.retain(|_, entry| entry.seen_at >= cutoff);
+                let removed = before - seen.len();
+                drop(seen);
+                tracing::info!(removed, "Scheduled add_seen eviction applied");
             }
         });
     }

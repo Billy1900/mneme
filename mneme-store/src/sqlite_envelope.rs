@@ -10,7 +10,7 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use mneme_core::*;
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, Connection};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
@@ -51,7 +51,30 @@ impl SqliteEnvelopeIndex {
              CREATE INDEX IF NOT EXISTS idx_envelopes_superseded_by
                  ON envelopes(superseded_by);
              CREATE INDEX IF NOT EXISTS idx_envelopes_confidence
-                 ON envelopes(confidence);",
+                 ON envelopes(confidence);
+
+             -- Relational tag index: lets tag-filtered search() narrow via
+             -- an indexed lookup instead of pulling every row and filtering
+             -- in the app layer, matching InMemoryEnvelopeIndex's tag_index.
+             CREATE TABLE IF NOT EXISTS envelope_tags (
+                 envelope_id TEXT NOT NULL,
+                 tag TEXT NOT NULL,
+                 PRIMARY KEY (envelope_id, tag)
+             );
+             CREATE INDEX IF NOT EXISTS idx_envelope_tags_tag
+                 ON envelope_tags(tag);
+
+             -- BM25 lexical channel, backed by SQLite's native FTS5 module
+             -- (works with the plain `bundled` rusqlite feature — this
+             -- SQLite build already has FTS5 compiled in) instead of a
+             -- hand-rolled index — matches InMemoryEnvelopeIndex's BM25
+             -- channel's role (fused with vector similarity via RRF in
+             -- search()), giving the SQLite backend feature parity.
+             CREATE VIRTUAL TABLE IF NOT EXISTS envelope_fts USING fts5(
+                 id UNINDEXED,
+                 text,
+                 tokenize = 'porter unicode61'
+             );",
         )
         .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
 
@@ -62,6 +85,47 @@ impl SqliteEnvelopeIndex {
 
     pub fn in_memory() -> Result<Self, StoreError> {
         Self::new(":memory:")
+    }
+
+    /// Re-index `id` for BM25 using `text` in place of whatever was indexed
+    /// for it before (typically the truncated `summary` indexed by
+    /// `upsert`). Does not touch the envelope itself — call after `upsert`.
+    /// Mirrors `InMemoryEnvelopeIndex::index_full_text`.
+    pub async fn index_full_text(&self, id: Uuid, text: &str) -> Result<(), StoreError> {
+        let conn = Arc::clone(&self.conn);
+        let id_str = id.to_string();
+        let text = text.to_string();
+        tokio::task::spawn_blocking(move || {
+            let conn = conn.lock().unwrap();
+            conn.execute("DELETE FROM envelope_fts WHERE id = ?1", params![id_str])
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            conn.execute(
+                "INSERT INTO envelope_fts (id, text) VALUES (?1, ?2)",
+                params![id_str, text],
+            )
+            .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            Ok::<_, StoreError>(())
+        })
+        .await
+        .map_err(|e| StoreError::VectorIndex(e.to_string()))?
+    }
+}
+
+/// Build an FTS5 MATCH query that matches any of `text`'s words (OR
+/// semantics, mirroring the in-memory BM25 channel's per-term scoring
+/// rather than requiring every word to be present). Each word is quoted as
+/// a literal phrase so FTS5 query-syntax characters in the input (`"`,
+/// `*`, `-`, `:`, ...) can't be interpreted as operators.
+fn fts_match_query(text: &str) -> Option<String> {
+    let terms: Vec<String> = text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("\"{}\"", s.replace('"', "\"\"")))
+        .collect();
+    if terms.is_empty() {
+        None
+    } else {
+        Some(terms.join(" OR "))
     }
 }
 
@@ -84,6 +148,7 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
         let env = envelope.clone();
         tokio::task::spawn_blocking(move || {
             let conn = conn.lock().unwrap();
+            let id_str = env.id.to_string();
             let emb_bytes = embedding_to_bytes(&env.embedding);
             let sessions_json = serde_json::to_string(&env.source_sessions).unwrap();
             let supersedes_json =
@@ -97,7 +162,7 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                   summary, tags, content_hash)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
                 params![
-                    env.id.to_string(),
+                    id_str,
                     emb_bytes,
                     env.confidence,
                     env.created_at.to_rfc3339(),
@@ -114,6 +179,34 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                 ],
             )
             .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+
+            // Re-upserting an existing id can change its tags — drop the old
+            // associations before adding the new ones, same reasoning as
+            // InMemoryEnvelopeIndex's tag_index maintenance.
+            conn.execute(
+                "DELETE FROM envelope_tags WHERE envelope_id = ?1",
+                params![id_str],
+            )
+            .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            for tag in &env.tags {
+                conn.execute(
+                    "INSERT OR IGNORE INTO envelope_tags (envelope_id, tag) VALUES (?1, ?2)",
+                    params![id_str, tag],
+                )
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            }
+
+            // Baseline lexical coverage from `summary` (always present).
+            // Callers with the full untruncated text should follow up with
+            // `index_full_text` — same pattern as the in-memory backend.
+            conn.execute("DELETE FROM envelope_fts WHERE id = ?1", params![id_str])
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            conn.execute(
+                "INSERT INTO envelope_fts (id, text) VALUES (?1, ?2)",
+                params![id_str, env.summary],
+            )
+            .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+
             Ok::<_, StoreError>(())
         })
         .await
@@ -126,21 +219,51 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
         let query = query.clone();
         let rows = tokio::task::spawn_blocking(move || {
             let conn = conn.lock().unwrap();
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, embedding, confidence, created_at, updated_at,
-                            last_accessed_at, access_count, memory_type, source_sessions,
-                            supersedes, superseded_by, summary, tags, content_hash
-                     FROM envelopes
-                     WHERE (?1 IS NULL OR superseded_by IS NULL)
-                       AND (?2 IS NULL OR memory_type = ?2)
-                       AND (?3 IS NULL OR confidence >= ?3)",
+
+            // Tag filter pushed into SQL via the envelope_tags index — an
+            // indexed lookup (AND-intersection across all requested tags,
+            // via GROUP BY/HAVING) instead of pulling every row and
+            // filtering in the app layer. Matches InMemoryEnvelopeIndex's
+            // tag_index in effect: a tag filter like `uid:{user_id}` scales
+            // with that tag's own row count, not the whole table.
+            let tag_clause = if query.tags.is_empty() {
+                String::new()
+            } else {
+                let placeholders = query.tags.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+                format!(
+                    " AND id IN (SELECT envelope_id FROM envelope_tags \
+                       WHERE tag IN ({placeholders}) \
+                       GROUP BY envelope_id HAVING COUNT(DISTINCT tag) = {})",
+                    query.tags.len()
                 )
+            };
+
+            let sql = format!(
+                "SELECT id, embedding, confidence, created_at, updated_at,
+                        last_accessed_at, access_count, memory_type, source_sessions,
+                        supersedes, superseded_by, summary, tags, content_hash
+                 FROM envelopes
+                 WHERE (?1 IS NULL OR superseded_by IS NULL)
+                   AND (?2 IS NULL OR memory_type = ?2)
+                   AND (?3 IS NULL OR confidence >= ?3)
+                   {tag_clause}"
+            );
+            let mut stmt = conn
+                .prepare(&sql)
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
 
             let active_filter: Option<&str> = if query.active_only { Some("1") } else { None };
             let type_filter: Option<String> = query.memory_type.map(|t| format!("{:?}", t));
             let conf_filter: Option<f32> = query.min_confidence;
+
+            let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = vec![
+                Box::new(active_filter.map(|s| s.to_string())),
+                Box::new(type_filter),
+                Box::new(conf_filter),
+            ];
+            for tag in &query.tags {
+                param_values.push(Box::new(tag.clone()));
+            }
 
             let rows: Vec<(
                 String,
@@ -158,31 +281,84 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                 String,
                 i64,
             )> = stmt
-                .query_map(params![active_filter, type_filter, conf_filter], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, Vec<u8>>(1)?,
-                        row.get::<_, f32>(2)?,
-                        row.get::<_, String>(3)?,
-                        row.get::<_, String>(4)?,
-                        row.get::<_, String>(5)?,
-                        row.get::<_, i64>(6)?,
-                        row.get::<_, String>(7)?,
-                        row.get::<_, String>(8)?,
-                        row.get::<_, String>(9)?,
-                        row.get::<_, Option<String>>(10)?,
-                        row.get::<_, String>(11)?,
-                        row.get::<_, String>(12)?,
-                        row.get::<_, i64>(13)?,
-                    ))
-                })
+                .query_map(
+                    params_from_iter(param_values.iter().map(|b| b.as_ref())),
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, Vec<u8>>(1)?,
+                            row.get::<_, f32>(2)?,
+                            row.get::<_, String>(3)?,
+                            row.get::<_, String>(4)?,
+                            row.get::<_, String>(5)?,
+                            row.get::<_, i64>(6)?,
+                            row.get::<_, String>(7)?,
+                            row.get::<_, String>(8)?,
+                            row.get::<_, String>(9)?,
+                            row.get::<_, Option<String>>(10)?,
+                            row.get::<_, String>(11)?,
+                            row.get::<_, String>(12)?,
+                            row.get::<_, i64>(13)?,
+                        ))
+                    },
+                )
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
-            Ok::<_, StoreError>(rows)
+
+            // BM25 lexical channel via FTS5, restricted to the ids just
+            // fetched above (same reasoning as the tag filter: bound the
+            // scan to this query's own candidate set, not the whole table).
+            let bm25_ranks: std::collections::HashMap<String, usize> =
+                if !query.query_text.trim().is_empty() && !rows.is_empty() {
+                    match fts_match_query(&query.query_text) {
+                        Some(match_expr) => {
+                            let candidate_ids: Vec<String> =
+                                rows.iter().map(|r| r.0.clone()).collect();
+                            let id_placeholders = candidate_ids
+                                .iter()
+                                .map(|_| "?")
+                                .collect::<Vec<_>>()
+                                .join(",");
+                            let fts_sql = format!(
+                                "SELECT id, bm25(envelope_fts) as score FROM envelope_fts \
+                             WHERE envelope_fts MATCH ? AND id IN ({id_placeholders}) \
+                             ORDER BY score ASC"
+                            );
+                            let mut fts_stmt = conn
+                                .prepare(&fts_sql)
+                                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+                            let mut fts_params: Vec<Box<dyn rusqlite::ToSql>> =
+                                vec![Box::new(match_expr)];
+                            for id in &candidate_ids {
+                                fts_params.push(Box::new(id.clone()));
+                            }
+                            let ranked_ids: Vec<String> = fts_stmt
+                                .query_map(
+                                    params_from_iter(fts_params.iter().map(|b| b.as_ref())),
+                                    |row| row.get::<_, String>(0),
+                                )
+                                .map_err(|e| StoreError::VectorIndex(e.to_string()))?
+                                .collect::<Result<Vec<_>, _>>()
+                                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+                            ranked_ids
+                                .into_iter()
+                                .enumerate()
+                                .map(|(rank, id)| (id, rank))
+                                .collect()
+                        }
+                        None => std::collections::HashMap::new(),
+                    }
+                } else {
+                    std::collections::HashMap::new()
+                };
+
+            Ok::<_, StoreError>((rows, bm25_ranks))
         })
         .await
         .map_err(|e| StoreError::VectorIndex(e.to_string()))??;
+
+        let (rows, bm25_ranks) = rows;
 
         let mut results: Vec<RetrievalResult> = rows
             .into_iter()
@@ -235,12 +411,32 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
                     }
                 },
             )
-            .filter(|r| {
-                query.tags.is_empty() || query.tags.iter().all(|t| r.envelope.tags.contains(t))
-            })
             .collect();
 
         results.sort_by(|a, b| b.retrieval_score.partial_cmp(&a.retrieval_score).unwrap());
+
+        // Fuse the vector ranking above with the BM25 lexical ranking via
+        // Reciprocal Rank Fusion — same RRF_K and formula as
+        // InMemoryEnvelopeIndex, so both backends rank identically given
+        // the same candidate set and scores.
+        const RRF_K: f32 = 60.0;
+        if !bm25_ranks.is_empty() {
+            let mut fused: Vec<(RetrievalResult, f32)> = results
+                .into_iter()
+                .enumerate()
+                .map(|(vec_rank, r)| {
+                    let vec_rrf = 1.0 / (RRF_K + vec_rank as f32 + 1.0);
+                    let lex_rrf = bm25_ranks
+                        .get(&r.envelope.id.to_string())
+                        .map(|&rank| 1.0 / (RRF_K + rank as f32 + 1.0))
+                        .unwrap_or(0.0);
+                    (r, vec_rrf + lex_rrf)
+                })
+                .collect();
+            fused.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            results = fused.into_iter().map(|(r, _)| r).collect();
+        }
+
         results.truncate(query.top_k);
         Ok(results)
     }
@@ -434,15 +630,39 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
         tokio::task::spawn_blocking(move || {
             let conn = conn.lock().unwrap();
             let cutoff = Utc::now() - chrono::Duration::hours(older_than_hours as i64);
-            let removed = conn
-                .execute(
-                    "DELETE FROM envelopes
-                 WHERE (memory_type = 'Working' AND created_at < ?1)
-                    OR (confidence < ?2 AND superseded_by IS NOT NULL)",
-                    params![cutoff.to_rfc3339(), confidence_floor],
+
+            // Collect matching ids first — envelope_tags/envelope_fts have
+            // no foreign key to `envelopes` (FTS5 virtual tables can't be
+            // FK targets), so a bulk DELETE FROM envelopes alone would
+            // leave orphaned rows in both.
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id FROM envelopes
+                     WHERE (memory_type = 'Working' AND created_at < ?1)
+                        OR (confidence < ?2 AND superseded_by IS NOT NULL)",
                 )
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
-            Ok::<_, StoreError>(removed)
+            let ids: Vec<String> = stmt
+                .query_map(params![cutoff.to_rfc3339(), confidence_floor], |row| {
+                    row.get::<_, String>(0)
+                })
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            drop(stmt);
+
+            for id in &ids {
+                conn.execute("DELETE FROM envelopes WHERE id = ?1", params![id])
+                    .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+                conn.execute(
+                    "DELETE FROM envelope_tags WHERE envelope_id = ?1",
+                    params![id],
+                )
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+                conn.execute("DELETE FROM envelope_fts WHERE id = ?1", params![id])
+                    .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            }
+            Ok::<_, StoreError>(ids.len())
         })
         .await
         .map_err(|e| StoreError::VectorIndex(e.to_string()))?
@@ -452,15 +672,20 @@ impl EnvelopeIndex for SqliteEnvelopeIndex {
         let conn = Arc::clone(&self.conn);
         tokio::task::spawn_blocking(move || {
             let conn = conn.lock().unwrap();
+            let id_str = id.to_string();
             let n = conn
-                .execute(
-                    "DELETE FROM envelopes WHERE id = ?1",
-                    params![id.to_string()],
-                )
+                .execute("DELETE FROM envelopes WHERE id = ?1", params![id_str])
                 .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             if n == 0 {
                 return Err(StoreError::NotFound(id));
             }
+            conn.execute(
+                "DELETE FROM envelope_tags WHERE envelope_id = ?1",
+                params![id_str],
+            )
+            .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
+            conn.execute("DELETE FROM envelope_fts WHERE id = ?1", params![id_str])
+                .map_err(|e| StoreError::VectorIndex(e.to_string()))?;
             Ok::<_, StoreError>(())
         })
         .await

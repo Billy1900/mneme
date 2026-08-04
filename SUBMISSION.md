@@ -43,16 +43,25 @@ lose everything written since the last one:
   corrupt the file — the previous snapshot stays valid until the new one is
   fully on disk.
 - **Write-ahead log** (`{path}.wal`) — every successful `/add` message and
-  `/remember` call is appended to this file as one JSON line, synchronously,
-  before the request returns. On startup, after loading the base snapshot,
-  the WAL is replayed on top of it, so writes that happened after the last
-  snapshot (including ones that never made it into any snapshot at all, if
-  the process was killed before the first periodic save) are recovered too.
-  A snapshot save truncates the WAL right after the new snapshot is durably
+  `/remember` call, and every `/add` idempotency-table change (a new
+  `request_id` seen, or one rolled back after a failed write), is appended
+  to this file as one JSON line (`WalEntry`), synchronously, before the
+  request returns. On startup, after loading the base snapshot, the WAL is
+  replayed on top of it, so writes that happened after the last snapshot
+  (including ones that never made it into any snapshot at all, if the
+  process was killed before the first periodic save) are recovered too. A
+  snapshot save truncates the WAL right after the new snapshot is durably
   on disk, under the same lock used for appends — see the doc comment on
   `wal_append`/`save_snapshot` in `mneme-server/src/main.rs` for why a write
   can never land in the gap between "snapshot read the store" and "WAL
   truncated" and be silently dropped.
+
+The `/add` idempotency table (`AppState.add_seen`) is part of this same
+snapshot + WAL, not a separate mechanism — so a `request_id` seen before a
+restart is still recognized as a duplicate afterward, not silently retried
+as new. Entries are capped at `ADD_SEEN_TTL_HOURS` (24h) by a background
+eviction task, so the table doesn't grow unbounded over a long-running
+evaluation.
 
 If `MNEME_SNAPSHOT_PATH` is unset, both mechanisms are disabled and the
 server is purely in-memory — a restart loses everything, same as before.
@@ -179,13 +188,14 @@ unset OPENAI_API_KEY
 cargo test --workspace
 ```
 
-`mneme-tests` (root `tests/`) covers the storage/consolidation engine.
+`mneme-tests` (root `tests/`) covers the storage/consolidation engine,
+including both backends' BM25 lexical channel and tag-index isolation.
 `mneme-server`'s `tests/http_integration.rs` covers the HTTP layer end to
 end, including the leaderboard contract: `/add` success + validation +
 `request_id` dedup, `/search` user isolation, the BM25 full-text lexical
 match (a keyword past the summary's truncation point), the response budget
 cap, and validation — alongside the pre-existing `/remember`, `/recall`,
-auth, and `/gc`/`/decay` coverage. 23 tests in that file, 52 across the
+auth, and `/gc`/`/decay` coverage. 23 tests in that file, 53 across the
 workspace.
 
 ## Known limitations
@@ -193,18 +203,22 @@ workspace.
 These are open items, not blockers for a smoke test, but relevant to reviewers
 assessing production-readiness for a long-running (72h) full evaluation:
 
-- **SQLite backend lacks feature parity with the in-memory one.**
-  `SqliteEnvelopeIndex` / `SqliteContentStore` exist in `mneme-store` but
-  aren't wired into `build_state()`; the SQLite backend's tag filter is a
-  post-scan (correct, but without the in-memory backend's per-tag index),
-  and it has no BM25 lexical channel at all — pure vector search only. This
-  is why durability is handled via snapshot + WAL on top of the in-memory
-  backend (see [Persistence](#persistence)) rather than by switching
-  backends.
-- **`request_id` dedup table is in-memory** (`AppState.add_seen`) and is not
-  part of the snapshot/WAL, so it's always lost on restart — a retried Add
-  with a `request_id` from before the restart will be treated as new and
-  written as a second, distinct engram rather than recognized as a retry.
+- **`SqliteEnvelopeIndex` isn't wired into `build_state()`.** It now has the
+  same tag-index-backed isolation (via a relational `envelope_tags` table)
+  and BM25 lexical channel (via SQLite's native FTS5, fused with vector
+  similarity through the same RRF logic) as `InMemoryEnvelopeIndex` — see
+  `mneme-store/src/sqlite_envelope.rs` and its regression test
+  (`test_sqlite_envelope_search_bm25_full_text`) — but it still isn't the
+  backend the server actually runs on. Durability is instead handled via
+  snapshot + WAL on top of the in-memory backend (see
+  [Persistence](#persistence)), which was simpler than swapping backends
+  and re-verifying every existing behavior against a new one under
+  evaluation-time pressure.
+
+Nothing else from earlier review rounds remains open: `/add` idempotency
+now survives a restart via the same snapshot + WAL path as engrams (see
+[Persistence](#persistence)), and is bounded by `ADD_SEEN_TTL_HOURS` so it
+can't grow unbounded over a long-running evaluation.
 
 ## License
 
