@@ -29,6 +29,27 @@ async fn body_json(body: Body) -> Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
+/// POST `payload` to `uri` against a running `app`, cloning the router (cheap
+/// — shares the same `Arc<AppState>`) so callers can issue multiple requests
+/// against one app/store within a single test.
+async fn post_json(app: &axum::Router, uri: &str, payload: Value) -> (StatusCode, Value) {
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("Content-Type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = resp.status();
+    let body = body_json(resp.into_body()).await;
+    (status, body)
+}
+
 // ═══════════════════════════════════════════════════════════
 // Test H1: GET /health
 // ═══════════════════════════════════════════════════════════
@@ -422,4 +443,231 @@ async fn test_http_auth_accepts_correct_token() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Agent Memory Leaderboard contract: POST /add, POST /search
+// ═══════════════════════════════════════════════════════════
+
+// Test H17: POST /add — success
+#[tokio::test]
+async fn test_http_add_success() {
+    let app = make_app();
+    let (status, body) = post_json(
+        &app,
+        "/add",
+        json!({
+            "request_id": "r1",
+            "user_id": "alice",
+            "session_id": "s1",
+            "messages": [{"role": "user", "content": "my favorite language is Rust"}],
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["success"], true);
+    assert_eq!(body["request_id"], "r1");
+    assert_eq!(body["user_id"], "alice");
+    assert_eq!(body["session_id"], "s1");
+}
+
+// Test H18: POST /add — validation rejects empty required fields
+#[tokio::test]
+async fn test_http_add_validation() {
+    let app = make_app();
+
+    let cases = [
+        json!({"request_id": "", "user_id": "a", "session_id": "s", "messages": [{"content": "x"}]}),
+        json!({"request_id": "r", "user_id": "", "session_id": "s", "messages": [{"content": "x"}]}),
+        json!({"request_id": "r", "user_id": "a", "session_id": "", "messages": [{"content": "x"}]}),
+        json!({"request_id": "r", "user_id": "a", "session_id": "s", "messages": []}),
+    ];
+    for payload in cases {
+        let (status, _) = post_json(&app, "/add", payload.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "payload: {payload}");
+    }
+}
+
+// Test H19: POST /add — repeated request_id is deduplicated, not double-written
+#[tokio::test]
+async fn test_http_add_dedup() {
+    let app = make_app();
+    let payload = json!({
+        "request_id": "dup1",
+        "user_id": "bob",
+        "session_id": "s1",
+        "messages": [{"role": "user", "content": "duplicate-sensitive fact"}],
+    });
+
+    let (status1, body1) = post_json(&app, "/add", payload.clone()).await;
+    let (status2, body2) = post_json(&app, "/add", payload).await;
+
+    assert_eq!(status1, StatusCode::OK);
+    assert_eq!(status2, StatusCode::OK);
+    assert_eq!(
+        body1, body2,
+        "retried request_id should return the same response"
+    );
+
+    let (_, search_body) = post_json(
+        &app,
+        "/search",
+        json!({"query": "duplicate-sensitive fact", "user_id": "bob", "top_k": 10}),
+    )
+    .await;
+    assert_eq!(
+        search_body["data"].as_array().unwrap().len(),
+        1,
+        "a retried request_id must not create a second engram"
+    );
+}
+
+// Test H20: POST /search — user isolation via uid tag
+#[tokio::test]
+async fn test_http_search_isolation() {
+    let app = make_app();
+    post_json(
+        &app,
+        "/add",
+        json!({
+            "request_id": "iso-a",
+            "user_id": "alice",
+            "session_id": "s1",
+            "messages": [{"role": "user", "content": "alice's secret project codename is FALCON"}],
+        }),
+    )
+    .await;
+    post_json(
+        &app,
+        "/add",
+        json!({
+            "request_id": "iso-b",
+            "user_id": "bob",
+            "session_id": "s1",
+            "messages": [{"role": "user", "content": "bob's secret project codename is OSPREY"}],
+        }),
+    )
+    .await;
+
+    let (_, alice_results) = post_json(
+        &app,
+        "/search",
+        json!({"query": "secret project codename", "user_id": "alice", "top_k": 10}),
+    )
+    .await;
+    let alice_data = alice_results["data"].as_array().unwrap();
+    assert_eq!(alice_data.len(), 1);
+    assert!(alice_data[0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("FALCON"));
+
+    let (_, bob_results) = post_json(
+        &app,
+        "/search",
+        json!({"query": "secret project codename", "user_id": "bob", "top_k": 10}),
+    )
+    .await;
+    let bob_data = bob_results["data"].as_array().unwrap();
+    assert_eq!(bob_data.len(), 1);
+    assert!(bob_data[0]["content"].as_str().unwrap().contains("OSPREY"));
+}
+
+// Test H21: POST /search — BM25 lexical channel finds a keyword past the
+// summary's ~100-char truncation point, where the vector channel alone
+// (over a hash-based MockEmbeddingModel, with no real semantic signal)
+// has no reliable way to rank the right memory first.
+#[tokio::test]
+async fn test_http_search_bm25_full_text_match() {
+    let app = make_app();
+    let long_message = format!(
+        "{}ZORBAXIL{}",
+        "padding text to push the keyword past the hundred character mark ".repeat(2),
+        " more padding text after the keyword as well for good measure"
+    );
+    assert!(
+        long_message.find("ZORBAXIL").unwrap() > 100,
+        "test setup: keyword must be past the summary truncation point"
+    );
+
+    post_json(
+        &app,
+        "/add",
+        json!({
+            "request_id": "bm25-1",
+            "user_id": "carol",
+            "session_id": "s1",
+            "messages": [{"role": "user", "content": long_message}],
+        }),
+    )
+    .await;
+
+    let (_, results) = post_json(
+        &app,
+        "/search",
+        json!({"query": "ZORBAXIL", "user_id": "carol", "top_k": 5}),
+    )
+    .await;
+    let data = results["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1, "BM25 should find the keyword past char 100");
+    assert!(data[0]["content"].as_str().unwrap().contains("ZORBAXIL"));
+}
+
+// Test H22: POST /search — validation rejects bad input
+#[tokio::test]
+async fn test_http_search_validation() {
+    let app = make_app();
+
+    let cases = [
+        json!({"query": "", "user_id": "a", "top_k": 5}),
+        json!({"query": "x", "user_id": "", "top_k": 5}),
+        json!({"query": "x", "user_id": "a", "top_k": 0}),
+        json!({"query": "x", "user_id": "a", "top_k": 101}),
+    ];
+    for payload in cases {
+        let (status, _) = post_json(&app, "/search", payload.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "payload: {payload}");
+    }
+}
+
+// Test H23: POST /search — response is capped so a flood of long memories
+// with a high top_k can't return an unbounded body.
+#[tokio::test]
+async fn test_http_search_response_budget_cap() {
+    let app = make_app();
+    let big = "The user described their project in great detail. ".repeat(150); // ~7800 chars
+    for i in 0..10 {
+        post_json(
+            &app,
+            "/add",
+            json!({
+                "request_id": format!("cap-{i}"),
+                "user_id": "dave",
+                "session_id": "s1",
+                "messages": [{"role": "user", "content": format!("{big} (memory {i})")}],
+            }),
+        )
+        .await;
+    }
+
+    let (_, results) = post_json(
+        &app,
+        "/search",
+        json!({"query": "project detail", "user_id": "dave", "top_k": 100}),
+    )
+    .await;
+    let data = results["data"].as_array().unwrap();
+    assert!(
+        data.len() < 10,
+        "budget cap should drop lower-ranked results, not return all 10"
+    );
+    let total_chars: usize = data
+        .iter()
+        .map(|d| d["content"].as_str().unwrap().len())
+        .sum();
+    assert!(total_chars <= 24_000, "total content chars: {total_chars}");
+    for item in data {
+        assert!(item["content"].as_str().unwrap().len() <= 4_003);
+    }
 }

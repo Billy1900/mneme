@@ -34,16 +34,32 @@ export MNEME_SNAPSHOT_PATH=./mneme-snapshot.json
 
 The default store (`InMemoryEnvelopeIndex` / `InMemoryContentStore`) lives
 entirely in process memory. Set `MNEME_SNAPSHOT_PATH` to a file path and the
-server will:
+server combines two mechanisms so a crash between periodic saves doesn't
+lose everything written since the last one:
 
-- load it on startup, if it exists,
-- save to it every 5 minutes in the background,
-- and save once more on graceful shutdown (`SIGTERM`/`SIGINT`).
+- **Full snapshot** — loaded on startup if it exists, saved every 5 minutes
+  in the background, and saved once more on graceful shutdown
+  (`SIGTERM`/`SIGINT`). Write-then-rename, so a crash mid-write can't
+  corrupt the file — the previous snapshot stays valid until the new one is
+  fully on disk.
+- **Write-ahead log** (`{path}.wal`) — every successful `/add` message and
+  `/remember` call is appended to this file as one JSON line, synchronously,
+  before the request returns. On startup, after loading the base snapshot,
+  the WAL is replayed on top of it, so writes that happened after the last
+  snapshot (including ones that never made it into any snapshot at all, if
+  the process was killed before the first periodic save) are recovered too.
+  A snapshot save truncates the WAL right after the new snapshot is durably
+  on disk, under the same lock used for appends — see the doc comment on
+  `wal_append`/`save_snapshot` in `mneme-server/src/main.rs` for why a write
+  can never land in the gap between "snapshot read the store" and "WAL
+  truncated" and be silently dropped.
 
-Saves are write-then-rename, so a crash mid-write can't corrupt the file —
-the previous snapshot stays valid until the new one is fully on disk. If
-`MNEME_SNAPSHOT_PATH` is unset, the server runs in-memory only and a restart
-loses all data, same as before.
+If `MNEME_SNAPSHOT_PATH` is unset, both mechanisms are disabled and the
+server is purely in-memory — a restart loses everything, same as before.
+Verified with a hard `kill -9` (no graceful shutdown, before any periodic
+save had fired): a memory written via `/add`, with a BM25-relevant keyword
+past the summary truncation point, was recovered via WAL replay alone after
+restart and was still findable by that keyword.
 
 This was chosen over switching the default backend to `SqliteEnvelopeIndex`
 because the tag index (multi-tenant isolation) and BM25 lexical channel
@@ -163,37 +179,32 @@ unset OPENAI_API_KEY
 cargo test --workspace
 ```
 
-`mneme-tests` (root `tests/`) covers the storage/consolidation engine; the
-`mneme-server` crate's `tests/http_integration.rs` covers the HTTP layer,
-including `/remember`, `/recall`, auth, and validation. `/add` and `/search`
-have been exercised via manual `curl` smoke tests (isolation, dedup, and
-retrieval correctness) but do not yet have automated integration tests in
-that suite — see below.
+`mneme-tests` (root `tests/`) covers the storage/consolidation engine.
+`mneme-server`'s `tests/http_integration.rs` covers the HTTP layer end to
+end, including the leaderboard contract: `/add` success + validation +
+`request_id` dedup, `/search` user isolation, the BM25 full-text lexical
+match (a keyword past the summary's truncation point), the response budget
+cap, and validation — alongside the pre-existing `/remember`, `/recall`,
+auth, and `/gc`/`/decay` coverage. 23 tests in that file, 52 across the
+workspace.
 
 ## Known limitations
 
 These are open items, not blockers for a smoke test, but relevant to reviewers
 assessing production-readiness for a long-running (72h) full evaluation:
 
-- **Restart durability depends on `MNEME_SNAPSHOT_PATH` being set** — see
-  [Persistence](#persistence). Without it, `mneme-server` is purely
-  in-memory and a crash loses everything since the last snapshot (up to 5
-  minutes of writes, if snapshotting is enabled at all). A crash between the
-  write-then-rename `save_snapshot` steps can't corrupt the file itself, but
-  can still lose up to one save interval of data — this is "at most every 5
-  minutes," not continuous durability. `SqliteEnvelopeIndex` /
-  `SqliteContentStore` exist in `mneme-store` as a per-write-durable
-  alternative but aren't wired into `build_state()`, and the SQLite
-  backend's tag filter is currently a post-scan (correct, but without the
-  same per-tag index optimization as the in-memory backend). The BM25
-  lexical channel is likewise only implemented for `InMemoryEnvelopeIndex` —
-  the SQLite backend falls back to pure vector search.
+- **SQLite backend lacks feature parity with the in-memory one.**
+  `SqliteEnvelopeIndex` / `SqliteContentStore` exist in `mneme-store` but
+  aren't wired into `build_state()`; the SQLite backend's tag filter is a
+  post-scan (correct, but without the in-memory backend's per-tag index),
+  and it has no BM25 lexical channel at all — pure vector search only. This
+  is why durability is handled via snapshot + WAL on top of the in-memory
+  backend (see [Persistence](#persistence)) rather than by switching
+  backends.
 - **`request_id` dedup table is in-memory** (`AppState.add_seen`) and is not
-  part of the snapshot, so it's always lost on restart — a retried Add that
-  lands after a restart will be treated as new rather than deduplicated.
-- **No automated tests for `/add` / `/search`** yet in `mneme-server/tests/` —
-  correctness so far has been verified via manual smoke tests, not CI-covered
-  regression tests.
+  part of the snapshot/WAL, so it's always lost on restart — a retried Add
+  with a `request_id` from before the restart will be treated as new and
+  written as a second, distinct engram rather than recognized as a retry.
 
 ## License
 

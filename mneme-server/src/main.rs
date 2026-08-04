@@ -67,6 +67,14 @@ pub struct AppState {
     /// first successful call. The platform retries Add on 408/409/425/429/
     /// 5xx, so a retried request_id must not be written twice.
     add_seen: tokio::sync::Mutex<std::collections::HashMap<String, (String, String)>>,
+    /// Set from MNEME_SNAPSHOT_PATH. `None` means fully in-memory — no
+    /// snapshot, no write-ahead log, a restart loses everything.
+    snapshot_path: Option<String>,
+    /// Serializes every write-ahead-log append against the periodic
+    /// snapshot's read-then-truncate, so a write can never land between
+    /// "snapshot read the store" and "WAL truncated" and be silently lost.
+    /// See `wal_append` / `save_snapshot`.
+    wal_lock: tokio::sync::Mutex<()>,
 }
 
 type SharedState = Arc<AppState>;
@@ -395,6 +403,7 @@ async fn remember(
         .put(&engram.content)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
+    wal_append(&state, &engram).await;
 
     Ok(Json(RememberResponse {
         id: id.to_string(),
@@ -657,6 +666,7 @@ async fn write_add_messages(
             .put(&engram.content)
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
+        wal_append(state, &engram).await;
     }
 
     Ok(())
@@ -960,18 +970,66 @@ async fn shutdown_signal() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Disk snapshot — durability for the in-memory backend
+// Disk snapshot + write-ahead log — durability for the in-memory backend
 //
 // `InMemoryEnvelopeIndex` / `InMemoryContentStore` lose everything on
 // restart. Rather than switching the default backend to SQLite (which would
 // give up the tag index and BM25 lexical channel above — neither is
-// implemented for `SqliteEnvelopeIndex`), periodically dump the in-memory
-// store to a JSON file and reload it on startup. Enabled by setting
-// `MNEME_SNAPSHOT_PATH`; a missing/unset path disables snapshotting
-// entirely (e.g. tests, ephemeral local runs).
+// implemented for `SqliteEnvelopeIndex`), this combines two mechanisms,
+// enabled together by setting `MNEME_SNAPSHOT_PATH` (unset disables both —
+// e.g. tests, ephemeral local runs):
+//
+// - A full JSON snapshot, taken periodically and on graceful shutdown.
+// - A write-ahead log (JSON Lines, one `Engram` per line) appended to on
+//   every successful write, so a hard kill between snapshots only risks
+//   losing whatever was mid-flight at that exact instant — not up to a
+//   full snapshot interval's worth of writes.
+//
+// `wal_lock` orders the two against each other: `save_snapshot` holds it
+// across "read the whole store" + "write the new snapshot" + "truncate the
+// WAL", and `wal_append` holds it just to append one line. That guarantees
+// any write either lands in the snapshot being taken, or — because it can't
+// append until the lock is free, which is after the truncate — lands in the
+// freshly-truncated WAL. Either way it survives; it can never fall in the
+// gap between "read for the snapshot" and "truncate" and be silently lost.
 // ─────────────────────────────────────────────────────────────
 
+async fn wal_append(state: &SharedState, engram: &Engram) {
+    let Some(path) = &state.snapshot_path else {
+        return;
+    };
+    let mut line = match serde_json::to_vec(engram) {
+        Ok(j) => j,
+        Err(e) => {
+            tracing::warn!("wal: failed to serialize engram: {}", e);
+            return;
+        }
+    };
+    line.push(b'\n');
+
+    let _guard = state.wal_lock.lock().await;
+    use tokio::io::AsyncWriteExt;
+    let file = tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(wal_path(path))
+        .await;
+    match file {
+        Ok(mut f) => {
+            if let Err(e) = f.write_all(&line).await {
+                tracing::warn!("wal: failed to append: {}", e);
+            }
+        }
+        Err(e) => tracing::warn!("wal: failed to open {}: {}", wal_path(path), e),
+    }
+}
+
 async fn save_snapshot(state: &SharedState, path: &str) {
+    // Hold wal_lock across the whole read-write-truncate sequence — see the
+    // module doc comment above for why this is what makes the combination
+    // of snapshot + WAL lose-nothing instead of racy.
+    let _guard = state.wal_lock.lock().await;
+
     let envelopes = state.envelopes.all();
     let mut engrams = Vec::with_capacity(envelopes.len());
     for envelope in envelopes {
@@ -1007,6 +1065,12 @@ async fn save_snapshot(state: &SharedState, path: &str) {
         return;
     }
     tracing::info!(count = engrams.len(), path, "snapshot saved");
+
+    // Everything up to here is now captured in the fresh snapshot, so the
+    // WAL only needs to cover writes from this point forward.
+    if let Err(e) = tokio::fs::write(wal_path(path), b"").await {
+        tracing::warn!("snapshot: failed to truncate WAL {}: {}", wal_path(path), e);
+    }
 }
 
 async fn load_snapshot(state: &SharedState, path: &str) {
@@ -1014,7 +1078,7 @@ async fn load_snapshot(state: &SharedState, path: &str) {
         Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             tracing::info!(path, "snapshot: no existing snapshot, starting empty");
-            return;
+            b"[]".to_vec()
         }
         Err(e) => {
             tracing::warn!("snapshot: failed to read {}: {}", path, e);
@@ -1025,28 +1089,70 @@ async fn load_snapshot(state: &SharedState, path: &str) {
         Ok(e) => e,
         Err(e) => {
             tracing::warn!("snapshot: failed to parse {}: {} — starting empty", path, e);
-            return;
+            Vec::new()
         }
     };
 
-    let count = engrams.len();
+    let mut count = 0;
     for engram in engrams {
-        let id = engram.envelope.id;
-        if let Err(e) = state.envelopes.upsert(&engram.envelope).await {
-            tracing::warn!(id = %id, error = %e, "snapshot: failed to restore envelope");
-            continue;
-        }
-        // Restore full-text BM25 coverage, not just the truncated summary
-        // that `upsert` alone indexes — see `index_full_text` doc comment.
-        state
-            .envelopes
-            .index_full_text(id, &engram.content.full_text)
-            .await;
-        if let Err(e) = state.content.put(&engram.content).await {
-            tracing::warn!(id = %id, error = %e, "snapshot: failed to restore content");
+        if restore_engram(state, engram).await {
+            count += 1;
         }
     }
     tracing::info!(count, path, "snapshot loaded");
+
+    // Replay any writes that landed in the WAL after the snapshot was taken
+    // (or that never made it into a snapshot at all, if the process was
+    // killed before the first periodic save).
+    let wal = wal_path(path);
+    match tokio::fs::read_to_string(&wal).await {
+        Ok(contents) => {
+            let mut replayed = 0;
+            let mut skipped = 0;
+            for line in contents.lines() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                match serde_json::from_str::<Engram>(line) {
+                    Ok(engram) => {
+                        if restore_engram(state, engram).await {
+                            replayed += 1;
+                        }
+                    }
+                    Err(_) => {
+                        // A trailing partial line from a crash mid-append is
+                        // expected and fine to drop — everything before it
+                        // is still intact, one line per completed write.
+                        skipped += 1;
+                    }
+                }
+            }
+            tracing::info!(replayed, skipped, wal, "WAL replayed");
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => tracing::warn!("wal: failed to read {}: {}", wal, e),
+    }
+}
+
+/// Replay one snapshot/WAL entry into the live store. Shared by both
+/// `load_snapshot`'s base-snapshot pass and its WAL-replay pass.
+async fn restore_engram(state: &SharedState, engram: Engram) -> bool {
+    let id = engram.envelope.id;
+    if let Err(e) = state.envelopes.upsert(&engram.envelope).await {
+        tracing::warn!(id = %id, error = %e, "snapshot: failed to restore envelope");
+        return false;
+    }
+    // Restore full-text BM25 coverage, not just the truncated summary that
+    // `upsert` alone indexes — see `index_full_text`'s doc comment.
+    state
+        .envelopes
+        .index_full_text(id, &engram.content.full_text)
+        .await;
+    if let Err(e) = state.content.put(&engram.content).await {
+        tracing::warn!(id = %id, error = %e, "snapshot: failed to restore content");
+        return false;
+    }
+    true
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1124,7 +1230,13 @@ pub fn build_state() -> SharedState {
         embed_model,
         config,
         add_seen: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+        snapshot_path: std::env::var("MNEME_SNAPSHOT_PATH").ok(),
+        wal_lock: tokio::sync::Mutex::new(()),
     })
+}
+
+fn wal_path(snapshot_path: &str) -> String {
+    format!("{snapshot_path}.wal")
 }
 
 // ─────────────────────────────────────────────────────────────
