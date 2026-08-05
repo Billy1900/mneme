@@ -166,18 +166,19 @@ and stores each as its own searchable engram
 (`write_extracted_facts` in `mneme-server/src/main.rs`, backed by
 `ConsolidationEngine::extract_facts`).
 
-The motivation is a specific measured failure. Recall over raw turns plus
-compacted engrams scored **0.388** on LoCoMo (`benchmark/results/RESULTS.md`),
-and neither existing layer is a good retrieval target:
+The motivation is that neither existing layer is a good retrieval target:
 
 - A **raw turn** is context-dependent. "yeah, I switched last month" embeds
   nothing a later question can match, because the referent lives in a
   neighbouring turn.
 - A **compacted engram** is a cluster-level summary. Compaction was supposed to
-  fix the above, but the same benchmark run showed it drops exactly the
-  fine-grained specifics — names, numbers, dates — that the questions ask
-  about, which is why `recall_with_fallback` had to start searching raw turns
-  again.
+  fix the above, but it drops exactly the fine-grained specifics — names,
+  numbers, dates — that the questions ask about, which is why
+  `recall_with_fallback` had to start searching raw turns again.
+
+**This feature does not currently pay for itself on LoCoMo.** See
+[Measured performance](#measured-performance) before enabling it for a scored
+run.
 
 A fact is the missing middle layer: one self-contained assertion with its
 pronouns resolved against the surrounding turns, and its date preserved. That
@@ -185,9 +186,14 @@ is a unit a query can actually match.
 
 Details:
 
-- **One LLM call per `/add` batch**, not per message — resolving "she" to a name
-  requires the surrounding turns, so a per-message window would defeat the
-  purpose as well as costing more.
+- **Windowed, not per message** — resolving "she" to a name requires the
+  surrounding turns, so a per-message call would defeat the purpose as well as
+  costing more. A batch is chunked into 10-line windows with 2 lines of overlap
+  (`chunk_window`), one LLM call each, results deduplicated. Overlap exists so a
+  pronoun near a window boundary still has its referent in view. Chunking was
+  added after a full 22-turn LoCoMo session both exhausted the token budget and
+  hit the extractor's 12-fact-per-call ceiling, silently discarding most of the
+  session.
 - **One code path.** The engram's shape — confidence, tags, memory type,
   summary, valid time — comes from `mneme_api::build_fact_engrams`, called by
   both this HTTP handler and `MnemeMemory::remember_facts` (the library path
@@ -204,6 +210,20 @@ Details:
   engram, since nothing has corroborated the fact across sessions yet.
 - Facts are short by construction, so the envelope summary is the whole fact:
   no truncation, and BM25 covers it fully.
+- **The stored body carries the fact *and* the window it came from.** The
+  summary and the embedding stay the bare claim, so retrieval matches on
+  something crisp, but `full_text` — what the answer generator receives —
+  appends the source turns. A bare fact is true and frequently unusable: "the
+  weekend before 13 September" cannot be answered from a sentence that has been
+  stripped of everything around it. See
+  [Measured performance](#measured-performance) for the numbers that forced
+  this.
+- **Facts are capped as a share of retrieval results** (`MAX_FACT_FRACTION`,
+  0.5). Facts are short and keyword-dense, so they outscore verbatim passages on
+  embedding similarity almost every time and, left uncapped, took every slot.
+  The cap is a ceiling rather than a quota: unused slots return to whichever
+  class still has candidates, so a query matching only facts still gets a full
+  result set.
 - The same call also returns an optional `(subject, relation, object)`
   decomposition, which goes straight into the **entity-relation graph**. Graph
   coverage therefore now comes from the write path instead of waiting on
@@ -245,8 +265,9 @@ like "this conversation contained no facts" rather than like an error:
 - Reasoning tokens are charged against `max_tokens` *before* any visible
   content. On the extraction prompt, DeepSeek V4 burned all 2048 tokens
   reasoning and returned `finish_reason: length` with empty content; at 8192 it
-  used ~6000 reasoning tokens and then answered normally. The backend now
-  requests 8192 and raises an explicit error on an empty completion.
+  used ~6000 reasoning tokens and then answered normally, and a full session
+  later exhausted 8192 as well. The backend now requests 16384 and raises an
+  explicit error on an empty completion rather than storing zero facts quietly.
 - The round-trip takes well over the default 30s timeout. Set
   `MNEME_FACT_EXTRACTION_TIMEOUT_SECS=180`.
 
@@ -258,6 +279,64 @@ alongside the raw turns — where the raw turns alone only offer the
 pronoun-bound *"She is a golden retriever. Melanie and I picked her up in
 Denver."* Facts and graph triplets were confirmed to survive a `kill -9`
 restart via WAL replay.
+
+## Measured performance
+
+**No leaderboard-comparable number exists for this submission yet.** Everything
+below was measured with DeepSeek `deepseek-v4-flash` on both the memory system
+and the judge, over 2 of LoCoMo's 10 conversations (235 questions). The
+leaderboard mandates gpt-4o-mini for Add and Search; that run has not been
+performed, because no funded OpenAI key was available during development. Treat
+these as configuration comparisons, not scores.
+
+### Fact extraction currently costs about 0.15 judge score
+
+| LoCoMo, 2 conversations | Judge | Token F1 | Exact match |
+|---|---|---|---|
+| Fact extraction **off** | **0.511** | 0.344 | 16.2% |
+| Fact extraction **on** | 0.355 | 0.263 | 13.6% |
+
+The diagnosed cause is context starvation, not bad facts. Both configurations
+retrieve 5 memories per question, but with extraction on those 5 carried a
+median of **121 tokens** against 1,077 with it off, and **146 of 235 questions
+were answered from under 200 tokens** of context (2 of 235 with it off). 44
+questions regressed against 15 improved, and 36 of the 44 regressions were the
+model replying "Not found in memory" — retrieval failures rather than reasoning
+failures, concentrated in the temporal (26) and multi-hop (14) categories that
+need surrounding narrative.
+
+Two fixes have been implemented and unit-tested but **not yet measured**: the
+retrieval cap described above, and storing each fact together with its source
+window. An earlier attempt at the cap was placed at the wrong pipeline stage and
+silently did nothing, which is why the fix is described here as unverified
+rather than as a solution.
+
+Until a run confirms otherwise, `MNEME_FACT_EXTRACTION=0` is the better
+configuration for a scored LoCoMo run, despite extraction being enabled by
+default whenever a real LLM backend is present.
+
+### The harness cannot currently resolve differences this small
+
+The extraction-off configuration was run twice across a code change that
+provably could not affect it, and moved **0.474 → 0.511** on its own. That
+±0.04 of run-to-run nondeterminism — a sampling model both generating and
+judging — is the same size as several deltas previously reported as findings.
+The 0.15 extraction gap is well outside it; smaller movements from this harness
+should not be trusted without more conversations and a temperature-0 judge.
+
+### Earlier numbers in this repository are superseded
+
+Results predating the harness audit — including the frequently-quoted **0.388**
+LoCoMo score and the multi-hop 0.067 → 0.151 improvement cited below — were
+produced by a benchmark harness with several silent-failure paths: fact
+extraction never ran on the benchmark path at all, reranking and entity
+extraction were starved of output tokens and returned degraded defaults,
+working-memory text was truncated to ~100 characters before reaching the answer
+generator, and unretried transport errors were recorded as scores of 0.0. Those
+numbers are a floor on the old system rather than a measurement of it.
+`benchmark/results/RESULTS.md` regenerates from the run JSONs and flags any run
+whose answers were mostly never generated as VOID instead of reporting its
+zeros.
 
 ## Bitemporal validity (valid time vs transaction time)
 
@@ -359,7 +438,7 @@ end, including the leaderboard contract: `/add` success + validation +
 `request_id` dedup, `/search` user isolation, the BM25 full-text lexical
 match (a keyword past the summary's truncation point), the response budget
 cap, and validation — alongside the pre-existing `/remember`, `/recall`,
-auth, and `/gc`/`/decay` coverage. 23 tests in that file, 53 across the
+auth, and `/gc`/`/decay` coverage. 23 tests in that file, 79 across the
 workspace.
 
 ## Multi-hop retrieval and consolidation improvements
@@ -389,11 +468,13 @@ question needs combined:
   logs a `ConflictRecord` with the LLM's reasoning — history stays
   traceable via the existing `supersedes` chain.
 
-These were validated against the LoCoMo multi-hop category via the
+These were originally validated against the LoCoMo multi-hop category via the
 `benchmark` crate (DeepSeek `deepseek-v4-flash` + local embeddings): a small
 sample (n=63, 2 conversations) went from judge score 0.067 to 0.151 after
-adding graph traversal, though a full 321-question run to confirm this at
-scale is still pending.
+adding graph traversal. **That measurement is superseded** — it came from the
+pre-audit harness, and at n=63 it sits close to the noise floor described in
+[Measured performance](#measured-performance). The mechanisms are sound and
+tested; the quoted improvement should be treated as unconfirmed.
 
 **Caveat:** the graph traversal and `related[]` expansion are consumed by
 `benchmark`'s `recall_multihop`/`MnemeMemory::recall` path, not yet by
@@ -421,10 +502,27 @@ assessing production-readiness for a long-running (72h) full evaluation:
   and re-verifying every existing behavior against a new one under
   evaluation-time pressure.
 
-Nothing else from earlier review rounds remains open: `/add` idempotency
-now survives a restart via the same snapshot + WAL path as engrams (see
-[Persistence](#persistence)), and is bounded by `ADD_SEEN_TTL_HOURS` so it
-can't grow unbounded over a long-running evaluation.
+- **`QdrantEnvelopeIndex` does not exist as working code.**
+  `mneme-store/src/qdrant_envelope.rs` is present in the tree but is not
+  declared as a module in `mneme-store/src/lib.rs`, so it has never been
+  compiled and cannot be selected at runtime. README's backend table lists
+  Qdrant + SQLite as "the recommended production setup" for millions of
+  engrams; that claim is not currently backed by reachable code. The largest
+  configuration actually exercised is the in-memory backend with 50,000 seeded
+  engrams (see [Isolation and performance](#isolation-and-performance)).
+- **No gpt-4o-mini run has been performed**, so the mandated submission
+  configuration is unvalidated end to end. Fact extraction in particular was
+  tuned against a reasoning model whose token behaviour differs substantially
+  (see the backend notes above), and the 30s default extraction timeout was
+  chosen for gpt-4o-mini but only ever exercised at 180s against DeepSeek.
+- **Benchmark coverage is thin.** Reported runs cover 2 of 10 LoCoMo
+  conversations. LongMemEval has no valid recent run — the two most recent
+  attempts both exhausted their API balance partway through and are marked VOID
+  in `benchmark/results/RESULTS.md`.
+
+`/add` idempotency now survives a restart via the same snapshot + WAL path as
+engrams (see [Persistence](#persistence)), and is bounded by
+`ADD_SEEN_TTL_HOURS` so it can't grow unbounded over a long-running evaluation.
 
 ## License
 
