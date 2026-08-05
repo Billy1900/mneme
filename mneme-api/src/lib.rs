@@ -268,7 +268,15 @@ pub async fn build_fact_engrams<M: EmbeddingModel>(
             },
             content: ContentBody {
                 engram_id: id,
-                full_text: text.to_string(),
+                // The claim plus the window it came from. Retrieval matches on
+                // the embedding of the bare fact, which stays crisp, but the
+                // answer generator receives the surrounding turns — a fact
+                // alone is true and unusable for the temporal and multi-hop
+                // questions that need to see what was around it ("the weekend
+                // before X", a chain across two sessions). Measured: with
+                // extraction on, 146 of 235 LoCoMo queries got under 200
+                // tokens of context and answered "not found in memory".
+                full_text: format!("{text}\n\nFrom the conversation:\n{provenance_window}"),
                 provenance: vec![ProvenanceRecord {
                     session_id: session_id.to_string(),
                     turn_id: None,

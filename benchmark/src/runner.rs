@@ -128,8 +128,66 @@ async fn recall_multihop(
             .partial_cmp(&a.retrieval_score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    all.truncate(top_k * 3);
-    all
+    // Cap the fact share of the pool the reranker sees. A plain truncate here
+    // let facts take every slot before the reranker had a choice to make.
+    mneme_api::blend_fact_and_source(all, top_k * 3, mneme_api::MAX_FACT_FRACTION)
+}
+
+/// Enforce the fact cap on the reranker's *output*, backfilling source text.
+///
+/// Capping the candidate pool is not enough: the reranker picks freely from
+/// what it is given, and short keyword-dense facts read as the most relevant
+/// answer to a question, so it returned all-fact sets anyway. This is the last
+/// stage before the answer prompt, so it is the only one that decides what the
+/// generator actually sees.
+///
+/// Rerank order is preserved among kept results; dropped fact slots are refilled
+/// from the pool, source text first, falling back to facts if no source text is
+/// available so the result set is never short.
+fn cap_fact_share(
+    selected: Vec<MnemeSummary>,
+    pool: Vec<MnemeSummary>,
+    top_k: usize,
+) -> Vec<MnemeSummary> {
+    let cap = ((top_k as f32 * mneme_api::MAX_FACT_FRACTION).ceil() as usize).min(top_k);
+    if selected
+        .iter()
+        .filter(|s| mneme_api::is_fact(&s.tags))
+        .count()
+        <= cap
+    {
+        return selected;
+    }
+
+    let mut kept: Vec<MnemeSummary> = Vec::with_capacity(top_k);
+    let mut facts_kept = 0;
+    for s in selected {
+        if mneme_api::is_fact(&s.tags) {
+            if facts_kept < cap {
+                facts_kept += 1;
+                kept.push(s);
+            }
+        } else {
+            kept.push(s);
+        }
+    }
+
+    let mut have: HashSet<Uuid> = kept.iter().map(|s| s.id).collect();
+    // Source text first; then facts, so a session that produced nothing but
+    // facts still returns a full set rather than a truncated one.
+    for allow_facts in [false, true] {
+        for c in &pool {
+            if kept.len() >= top_k {
+                break;
+            }
+            if (allow_facts || !mneme_api::is_fact(&c.tags)) && have.insert(c.id) {
+                kept.push(c.clone());
+            }
+        }
+    }
+
+    kept.truncate(top_k);
+    kept
 }
 
 /// Re-rank candidates by relevance to the question, return top `keep`.
@@ -381,7 +439,9 @@ pub async fn run_locomo(
                     let t0 = Instant::now();
                     let candidates =
                         recall_multihop(&session, &embed_ref, &judge_ref, &q.question, 15).await;
+                    let pool = candidates.clone();
                     let summaries = rerank(&judge_ref, &q.question, candidates, top_k).await;
+                    let summaries = cap_fact_share(summaries, pool, top_k);
                     let latency_ms = t0.elapsed().as_millis() as u64;
 
                     let memory_context: String = summaries
@@ -522,7 +582,9 @@ pub async fn run_longmemeval(
 
                 let t0 = Instant::now();
                 let candidates = recall_with_fallback(&session, &embed, &item.question, 15).await;
+                let pool = candidates.clone();
                 let summaries = rerank(&judge, &item.question, candidates, top_k).await;
+                let summaries = cap_fact_share(summaries, pool, top_k);
                 let latency_ms = t0.elapsed().as_millis() as u64;
 
                 let memory_context: String = summaries
@@ -585,4 +647,84 @@ pub async fn run_longmemeval(
         .await;
 
     Ok(all_results)
+}
+
+#[cfg(test)]
+mod cap_tests {
+    use super::*;
+
+    fn s(tag: &str, score: f32) -> MnemeSummary {
+        MnemeSummary {
+            id: Uuid::new_v4(),
+            summary: String::new(),
+            full_text: String::new(),
+            confidence: 0.5,
+            tags: vec![tag.to_string()],
+            similarity: score,
+            retrieval_score: score,
+            version: 1,
+            is_evolved: false,
+        }
+    }
+
+    /// The reranker returning an all-fact set is the case that made 146 of 235
+    /// LoCoMo queries answer from under 200 tokens of context.
+    #[test]
+    fn caps_an_all_fact_rerank_and_backfills_source() {
+        let selected: Vec<_> = (0..5).map(|_| s("fact", 0.9)).collect();
+        let pool: Vec<_> = selected
+            .iter()
+            .cloned()
+            .chain((0..5).map(|_| s("turn", 0.4)))
+            .collect();
+
+        let out = cap_fact_share(selected, pool, 5);
+
+        assert_eq!(out.len(), 5, "result set must stay full");
+        assert_eq!(
+            out.iter().filter(|x| mneme_api::is_fact(&x.tags)).count(),
+            3,
+            "facts capped at their share"
+        );
+        assert_eq!(
+            out.iter().filter(|x| !mneme_api::is_fact(&x.tags)).count(),
+            2,
+            "freed slots refilled with source text"
+        );
+    }
+
+    /// No source text anywhere: returning 3 of 5 would be a worse bug than the
+    /// one being fixed.
+    #[test]
+    fn refills_with_facts_when_no_source_exists() {
+        let selected: Vec<_> = (0..5).map(|_| s("fact", 0.9)).collect();
+        let pool: Vec<_> = selected
+            .iter()
+            .cloned()
+            .chain((0..3).map(|_| s("fact", 0.5)))
+            .collect();
+
+        let out = cap_fact_share(selected, pool, 5);
+        assert_eq!(out.len(), 5);
+    }
+
+    #[test]
+    fn leaves_an_already_compliant_set_untouched() {
+        let selected = vec![s("fact", 0.9), s("turn", 0.8), s("turn", 0.7)];
+        let ids: Vec<_> = selected.iter().map(|x| x.id).collect();
+        let out = cap_fact_share(selected.clone(), selected, 5);
+        assert_eq!(out.iter().map(|x| x.id).collect::<Vec<_>>(), ids);
+    }
+
+    #[test]
+    fn never_duplicates_a_result() {
+        let selected: Vec<_> = (0..5).map(|_| s("fact", 0.9)).collect();
+        let pool = selected.iter().cloned().chain([s("turn", 0.4)]).collect();
+        let out = cap_fact_share(selected, pool, 5);
+        let mut ids: Vec<_> = out.iter().map(|x| x.id).collect();
+        ids.sort();
+        let before = ids.len();
+        ids.dedup();
+        assert_eq!(ids.len(), before, "backfill must not re-add a kept result");
+    }
 }

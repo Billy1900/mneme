@@ -1698,7 +1698,16 @@ mod tests {
         // Facts are short by construction — the summary is the whole fact,
         // untruncated, so BM25 covers all of it.
         assert_eq!(env.summary, "Melanie adopted Cooper.");
-        assert_eq!(engrams[0].content.full_text, "Melanie adopted Cooper.");
+        // full_text carries the claim *and* the window it came from: the
+        // summary and embedding stay crisp for retrieval, while the answer
+        // generator gets the surrounding turns it needs to place the fact in
+        // time and context.
+        let full = &engrams[0].content.full_text;
+        assert!(full.starts_with("Melanie adopted Cooper."));
+        assert!(
+            full.contains("window"),
+            "fact must carry its source window, got: {full}"
+        );
 
         // The extractor's date became real valid time.
         assert_eq!(
