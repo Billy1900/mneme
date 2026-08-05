@@ -49,6 +49,29 @@ def fmt_pct(x):
     return f"{x * 100:.1f}%"
 
 
+def void_warning(s):
+    """Flag a run whose answers were mostly never generated.
+
+    A failed generate_answer is recorded as "Not found in memory" and scores
+    0.0 — identical to a genuine retrieval miss. When nearly every answer looks
+    like that, the run measured an outage (API credit exhaustion, network) and
+    not the memory system, so it must not be read as a score.
+    """
+    rs = s.get("results") or []
+    if not rs:
+        return ""
+    nf = sum(1 for r in rs if "not found in memory" in str(r.get("predicted", "")).lower())
+    if nf / len(rs) < 0.9:
+        return ""
+    return (
+        f"> **VOID — not a measurement.** {nf} of {len(rs)} answers were never "
+        "generated (the run recorded the placeholder that a failed answer call "
+        "produces, which scores 0.0 just like a real miss). The scores below "
+        "reflect an outage, not retrieval quality. Check the run log for the "
+        "cause and re-run before drawing any conclusion from this table."
+    )
+
+
 def summary_table(s):
     lines = [
         "| Metric | Value |",
@@ -139,6 +162,9 @@ def main():
                 "",
             ]
             continue
+        warn = void_warning(data)
+        if warn:
+            parts += [warn, ""]
         parts += [summary_table(data), category_table(data), ""]
 
     on = next((d for s, _, _, d in loaded if s == "locomo_deepseek_facts_on"), None)

@@ -14,7 +14,8 @@ target
 **/mutants.out*/
 
 # Benchmark result files (large JSON, not source)
-benchmark/results/
+benchmark/results/*
+!benchmark/results/RESULTS.md
 
 # Downloaded local embedding model weights (fastembed / ONNX Runtime)
 .fastembed_cache/
