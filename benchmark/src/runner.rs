@@ -281,8 +281,12 @@ async fn recall_with_fallback(
             .partial_cmp(&a.retrieval_score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    merged.truncate(top_k * 2); // pass extra candidates to reranker
-    merged
+    // Cap the fact share of the candidate set. A plain score sort here let
+    // short, keyword-dense fact engrams outscore the verbatim turns that exist
+    // precisely to supply what compaction drops — the reranker can only pick
+    // from what it is handed, so crowding at this step is unrecoverable
+    // downstream.
+    mneme_api::blend_fact_and_source(merged, top_k * 2, mneme_api::MAX_FACT_FRACTION)
 }
 
 pub async fn run_locomo(

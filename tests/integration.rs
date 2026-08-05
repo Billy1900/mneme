@@ -1807,3 +1807,88 @@ mod tests {
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────
+// Retrieval blending: facts must not crowd out source text
+// ─────────────────────────────────────────────────────────
+
+fn summary_with(tags: &[&str], score: f32) -> mneme_api::MnemeSummary {
+    mneme_api::MnemeSummary {
+        id: uuid::Uuid::new_v4(),
+        summary: String::new(),
+        full_text: String::new(),
+        confidence: 0.5,
+        tags: tags.iter().map(|t| t.to_string()).collect(),
+        similarity: score,
+        retrieval_score: score,
+        version: 1,
+        is_evolved: false,
+    }
+}
+
+/// Facts score higher than source text on embedding similarity because they are
+/// short and keyword-dense, so a plain score sort hands back an all-fact set.
+#[test]
+fn test_blend_caps_fact_share() {
+    // Every fact outscores every source passage — the pathological case.
+    let mut candidates: Vec<_> = (0..10).map(|i| summary_with(&["fact"], 0.9 - i as f32 * 0.01)).collect();
+    candidates.extend((0..10).map(|i| summary_with(&["turn"], 0.5 - i as f32 * 0.01)));
+
+    let out = mneme_api::blend_fact_and_source(candidates, 6, 0.5);
+
+    assert_eq!(out.len(), 6);
+    let facts = out.iter().filter(|s| mneme_api::is_fact(&s.tags)).count();
+    assert_eq!(facts, 3, "facts must not exceed their share of the result set");
+    assert_eq!(out.len() - facts, 3, "source text must keep its reserved slots");
+}
+
+/// The cap is a ceiling, not a quota: unused slots must go back to the other
+/// class, or a query matching only facts would return a short result set.
+#[test]
+fn test_blend_backfills_when_one_class_is_absent() {
+    let only_facts: Vec<_> = (0..8).map(|i| summary_with(&["fact"], 0.9 - i as f32 * 0.01)).collect();
+    let out = mneme_api::blend_fact_and_source(only_facts, 5, 0.5);
+    assert_eq!(out.len(), 5, "facts should fill slots no source text can claim");
+
+    let only_source: Vec<_> = (0..8).map(|i| summary_with(&["turn"], 0.9 - i as f32 * 0.01)).collect();
+    let out = mneme_api::blend_fact_and_source(only_source, 5, 0.5);
+    assert_eq!(out.len(), 5);
+}
+
+/// A class with fewer candidates than its share should not strand slots.
+#[test]
+fn test_blend_backfills_scarce_class() {
+    let mut candidates: Vec<_> = vec![summary_with(&["fact"], 0.9)];
+    candidates.extend((0..10).map(|i| summary_with(&["turn"], 0.5 - i as f32 * 0.01)));
+
+    let out = mneme_api::blend_fact_and_source(candidates, 6, 0.5);
+    assert_eq!(out.len(), 6);
+    assert_eq!(out.iter().filter(|s| mneme_api::is_fact(&s.tags)).count(), 1);
+}
+
+#[test]
+fn test_blend_preserves_score_order_and_short_input() {
+    let candidates = vec![
+        summary_with(&["turn"], 0.2),
+        summary_with(&["fact"], 0.8),
+        summary_with(&["turn"], 0.5),
+    ];
+    let out = mneme_api::blend_fact_and_source(candidates, 10, 0.5);
+    assert_eq!(out.len(), 3, "input shorter than the limit passes through");
+
+    let mut candidates: Vec<_> = (0..6).map(|i| summary_with(&["fact"], 0.9 - i as f32 * 0.1)).collect();
+    candidates.extend((0..6).map(|i| summary_with(&["turn"], 0.8 - i as f32 * 0.1)));
+    let out = mneme_api::blend_fact_and_source(candidates, 4, 0.5);
+    for w in out.windows(2) {
+        assert!(w[0].retrieval_score >= w[1].retrieval_score, "output must be score-ordered");
+    }
+}
+
+/// With top_k=1 a floor-rounded cap would make facts unreachable entirely.
+#[test]
+fn test_blend_admits_a_fact_at_limit_one() {
+    let candidates = vec![summary_with(&["fact"], 0.9), summary_with(&["turn"], 0.1)];
+    let out = mneme_api::blend_fact_and_source(candidates, 1, 0.5);
+    assert_eq!(out.len(), 1);
+    assert!(mneme_api::is_fact(&out[0].tags));
+}

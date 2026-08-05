@@ -102,6 +102,95 @@ pub fn chunk_window(window: &str) -> Vec<String> {
 /// stops the benchmark and the server from silently measuring different
 /// systems — which is exactly what happened when this logic lived only in the
 /// `/add` handler and the benchmark went through [`MnemeMemory::remember`].
+/// Tag marking an engram as an extracted standalone fact rather than
+/// conversational source text.
+pub const FACT_TAG: &str = "fact";
+
+/// Ceiling on the share of a result set that extracted facts may occupy.
+///
+/// Facts are short and keyword-dense, so they outscore verbatim source text on
+/// embedding similarity almost every time. Left to compete on raw score they
+/// swept the result set: measured over a 2-conversation LoCoMo pair, enabling
+/// extraction cut average context from 1286 to 260 tokens per query and raised
+/// unanswerable questions from 68 to 109 of 235, costing 0.086 judge score.
+/// The facts were not wrong — they were crowding out the passages that carried
+/// enough context to actually answer from.
+pub const MAX_FACT_FRACTION: f32 = 0.5;
+
+/// Multiple of `top_k` to fetch from the store before blending, so both facts
+/// and source text are present to choose between.
+pub const RECALL_OVERFETCH: usize = 3;
+
+/// True if this engram is an extracted fact rather than source text.
+pub fn is_fact(tags: &[String]) -> bool {
+    tags.iter().any(|t| t == FACT_TAG)
+}
+
+/// Select `limit` results while capping how much of the set extracted facts
+/// may occupy, so they cannot crowd out conversational source text.
+///
+/// Candidates are assumed to arrive in the caller's preferred order (normally
+/// descending retrieval score); relative order within each class is preserved.
+/// The cap is a ceiling, not a quota: if one class is short, the other backfills
+/// the unused slots, so a query with no matching source text still returns a
+/// full set of facts rather than a truncated one.
+pub fn blend_fact_and_source(
+    candidates: Vec<MnemeSummary>,
+    limit: usize,
+    max_fact_fraction: f32,
+) -> Vec<MnemeSummary> {
+    blend_by(
+        candidates,
+        limit,
+        max_fact_fraction,
+        |c| is_fact(&c.tags),
+        |c| c.retrieval_score,
+    )
+}
+
+/// [`blend_fact_and_source`] over any candidate type.
+///
+/// Lets a caller blend raw search hits before paying for per-result content
+/// loads, rather than loading three times what it will keep.
+pub fn blend_by<T>(
+    candidates: Vec<T>,
+    limit: usize,
+    max_fact_fraction: f32,
+    is_fact_of: impl Fn(&T) -> bool,
+    score_of: impl Fn(&T) -> f32,
+) -> Vec<T> {
+    if limit == 0 || candidates.len() <= limit {
+        let mut out = candidates;
+        out.truncate(limit);
+        return out;
+    }
+
+    let (facts, source): (Vec<_>, Vec<_>) = candidates.into_iter().partition(|c| is_fact_of(c));
+
+    // Round the cap up so a small top_k still admits at least one fact: with
+    // limit=5 and fraction=0.5 that is 3 facts and 2 source passages, and
+    // truncating would silently make facts unreachable at limit=1.
+    let fact_cap = ((limit as f32 * max_fact_fraction).ceil() as usize).min(limit);
+
+    let n_facts = facts.len().min(fact_cap);
+    let n_source = source.len().min(limit - n_facts);
+    // Unused slots go back to whichever class still has candidates.
+    let n_facts = facts.len().min(n_facts + (limit - n_facts - n_source));
+
+    let mut out: Vec<T> = facts
+        .into_iter()
+        .take(n_facts)
+        .chain(source.into_iter().take(n_source))
+        .collect();
+
+    out.sort_by(|a, b| {
+        score_of(b)
+            .partial_cmp(&score_of(a))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    out
+}
+
 pub async fn build_fact_engrams<M: EmbeddingModel>(
     facts: &[ExtractedFact],
     session_id: &str,
@@ -130,7 +219,7 @@ pub async fn build_fact_engrams<M: EmbeddingModel>(
         let now = Utc::now();
 
         let mut fact_tags = tags.to_vec();
-        fact_tags.push("fact".to_string());
+        fact_tags.push(FACT_TAG.to_string());
         if let Some(date) = fact
             .date
             .as_deref()
@@ -409,7 +498,10 @@ where
 
         let mem_query = MemoryQuery {
             embedding: query_embedding,
-            top_k,
+            // Over-fetch so the fact/source blend below has both classes to
+            // choose from. Asking the store for exactly `top_k` would let facts
+            // sweep the result set before the blend ever sees a source passage.
+            top_k: top_k.saturating_mul(RECALL_OVERFETCH),
             active_only: true,
             memory_type: Some(MemoryType::Semantic),
             min_confidence: Some(0.1),
@@ -424,6 +516,17 @@ where
         };
 
         let results = self.store.search(&mem_query).await?;
+
+        // Cap the fact share before loading content: blending here keeps the
+        // per-result content loads proportional to what is actually returned
+        // rather than to the over-fetch.
+        let results = blend_by(
+            results,
+            top_k,
+            MAX_FACT_FRACTION,
+            |r| is_fact(&r.envelope.tags),
+            |r| r.retrieval_score,
+        );
 
         // FIX #3: spawn reconsolidation so it never blocks the caller
         // (Previously called directly, blocking for the full LLM round-trip)
